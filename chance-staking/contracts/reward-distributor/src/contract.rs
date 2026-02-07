@@ -153,17 +153,18 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 mod tests {
     use super::*;
     use chance_staking_common::types::{DrawStatus, DrawType};
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, message_info, MockApi};
     use cosmwasm_std::{coins, Timestamp};
     use sha2::{Digest, Sha256};
 
-    use crate::state::{DRAWS, DRAW_STATE, SNAPSHOTS};
+    use crate::state::{DRAWS, DRAW_STATE};
 
     fn default_instantiate_msg() -> InstantiateMsg {
+        let mock_api = MockApi::default();
         InstantiateMsg {
-            operator: "operator".to_string(),
-            staking_hub: "staking_hub".to_string(),
-            drand_oracle: "drand_oracle".to_string(),
+            operator: mock_api.addr_make("operator").to_string(),
+            staking_hub: mock_api.addr_make("staking_hub").to_string(),
+            drand_oracle: mock_api.addr_make("drand_oracle").to_string(),
             reveal_deadline_seconds: 3600,
             regular_draw_reward: Uint128::from(10_000_000u128),
             big_draw_reward: Uint128::from(100_000_000u128),
@@ -171,8 +172,10 @@ mod tests {
     }
 
     fn setup_contract(deps: DepsMut) {
+        let mock_api = MockApi::default();
         let msg = default_instantiate_msg();
-        let info = mock_info("admin", &[]);
+        let admin = mock_api.addr_make("admin");
+        let info = message_info(&admin, &[]);
         instantiate(deps, mock_env(), info, msg).unwrap();
     }
 
@@ -181,10 +184,13 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
+        let admin = deps.api.addr_make("admin");
+        let operator = deps.api.addr_make("operator");
+        let staking_hub = deps.api.addr_make("staking_hub");
         let config = CONFIG.load(deps.as_ref().storage).unwrap();
-        assert_eq!(config.admin.as_str(), "admin");
-        assert_eq!(config.operator.as_str(), "operator");
-        assert_eq!(config.staking_hub.as_str(), "staking_hub");
+        assert_eq!(config.admin, admin);
+        assert_eq!(config.operator, operator);
+        assert_eq!(config.staking_hub, staking_hub);
 
         let state = DRAW_STATE.load(deps.as_ref().storage).unwrap();
         assert_eq!(state.next_draw_id, 0);
@@ -196,7 +202,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("staking_hub", &coins(50_000_000, "inj"));
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &coins(50_000_000, "inj"));
         let res = execute(
             deps.as_mut(),
             mock_env(),
@@ -215,7 +222,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("random", &coins(50_000_000, "inj"));
+        let random = deps.api.addr_make("random");
+        let info = message_info(&random, &coins(50_000_000, "inj"));
         let err = execute(
             deps.as_mut(),
             mock_env(),
@@ -231,7 +239,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("staking_hub", &coins(100_000_000, "inj"));
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &coins(100_000_000, "inj"));
         execute(
             deps.as_mut(),
             mock_env(),
@@ -249,7 +258,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("staking_hub", &coins(50_000_000, "inj"));
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &coins(50_000_000, "inj"));
         execute(
             deps.as_mut(),
             mock_env(),
@@ -261,7 +271,8 @@ mod tests {
         let secret = b"my_secret";
         let commit: [u8; 32] = Sha256::digest(secret).into();
 
-        let info = mock_info("operator", &[]);
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
         let err = execute(
             deps.as_mut(),
             mock_env(),
@@ -284,7 +295,8 @@ mod tests {
         setup_contract(deps.as_mut());
 
         // Fund pool
-        let info = mock_info("staking_hub", &coins(50_000_000, "inj"));
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &coins(50_000_000, "inj"));
         execute(
             deps.as_mut(),
             mock_env(),
@@ -294,7 +306,8 @@ mod tests {
         .unwrap();
 
         // Set snapshot
-        let info = mock_info("staking_hub", &[]);
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &[]);
         execute(
             deps.as_mut(),
             mock_env(),
@@ -313,7 +326,8 @@ mod tests {
         let commit: [u8; 32] = Sha256::digest(secret).into();
         let commit_hex = hex::encode(commit);
 
-        let info = mock_info("operator", &[]);
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
         execute(
             deps.as_mut(),
             mock_env(),
@@ -343,7 +357,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("staking_hub", &coins(5_000_000, "inj"));
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &coins(5_000_000, "inj"));
         execute(
             deps.as_mut(),
             mock_env(),
@@ -352,7 +367,8 @@ mod tests {
         )
         .unwrap();
 
-        let info = mock_info("staking_hub", &[]);
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &[]);
         execute(
             deps.as_mut(),
             mock_env(),
@@ -369,7 +385,8 @@ mod tests {
         let secret = b"my_secret";
         let commit: [u8; 32] = Sha256::digest(secret).into();
 
-        let info = mock_info("operator", &[]);
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
         let err = execute(
             deps.as_mut(),
             mock_env(),
@@ -391,7 +408,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("staking_hub", &coins(50_000_000, "inj"));
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &coins(50_000_000, "inj"));
         execute(
             deps.as_mut(),
             mock_env(),
@@ -400,7 +418,8 @@ mod tests {
         )
         .unwrap();
 
-        let info = mock_info("staking_hub", &[]);
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &[]);
         execute(
             deps.as_mut(),
             mock_env(),
@@ -416,7 +435,8 @@ mod tests {
 
         let secret = b"my_secret";
         let commit: [u8; 32] = Sha256::digest(secret).into();
-        let info = mock_info("operator", &[]);
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
         execute(
             deps.as_mut(),
             mock_env(),
@@ -432,7 +452,8 @@ mod tests {
         .unwrap();
 
         // Too early
-        let info = mock_info("anyone", &[]);
+        let anyone = deps.api.addr_make("anyone");
+        let info = message_info(&anyone, &[]);
         let err = execute(
             deps.as_mut(),
             mock_env(),
@@ -446,7 +467,8 @@ mod tests {
         let mut env = mock_env();
         env.block.time = Timestamp::from_seconds(env.block.time.seconds() + 7200);
 
-        let info = mock_info("anyone", &[]);
+        let anyone = deps.api.addr_make("anyone");
+        let info = message_info(&anyone, &[]);
         execute(deps.as_mut(), env, info, ExecuteMsg::ExpireDraw { draw_id: 0 }).unwrap();
 
         let draw = DRAWS.load(deps.as_ref().storage, 0).unwrap();
@@ -461,7 +483,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("staking_hub", &coins(50_000_000, "inj"));
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &coins(50_000_000, "inj"));
         execute(
             deps.as_mut(),
             mock_env(),
@@ -470,7 +493,8 @@ mod tests {
         )
         .unwrap();
 
-        let info = mock_info("staking_hub", &[]);
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &[]);
         execute(
             deps.as_mut(),
             mock_env(),
@@ -486,7 +510,8 @@ mod tests {
 
         let secret = b"my_secret";
         let commit: [u8; 32] = Sha256::digest(secret).into();
-        let info = mock_info("operator", &[]);
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
         execute(
             deps.as_mut(),
             mock_env(),
@@ -502,7 +527,8 @@ mod tests {
         .unwrap();
 
         // Wrong secret
-        let info = mock_info("operator", &[]);
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
         let err = execute(
             deps.as_mut(),
             mock_env(),
@@ -525,7 +551,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("staking_hub", &coins(50_000_000, "inj"));
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &coins(50_000_000, "inj"));
         execute(
             deps.as_mut(),
             mock_env(),
@@ -534,7 +561,8 @@ mod tests {
         )
         .unwrap();
 
-        let info = mock_info("staking_hub", &[]);
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &[]);
         execute(
             deps.as_mut(),
             mock_env(),
@@ -550,7 +578,8 @@ mod tests {
 
         let secret = b"my_secret";
         let commit: [u8; 32] = Sha256::digest(secret).into();
-        let info = mock_info("operator", &[]);
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
         execute(
             deps.as_mut(),
             mock_env(),
@@ -568,7 +597,8 @@ mod tests {
         let mut env = mock_env();
         env.block.time = Timestamp::from_seconds(env.block.time.seconds() + 7200);
 
-        let info = mock_info("operator", &[]);
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
         let err = execute(
             deps.as_mut(),
             env,

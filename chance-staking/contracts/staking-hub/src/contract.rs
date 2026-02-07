@@ -131,18 +131,19 @@ mod tests {
     use crate::state::UNSTAKE_REQUESTS;
 
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{Api, Coin, CosmosMsg, StakingMsg, SubMsg, Timestamp, coins};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, message_info, MockApi};
+    use cosmwasm_std::{Coin, Timestamp, coins};
 
     fn default_instantiate_msg() -> InstantiateMsg {
+        let mock_api = MockApi::default();
         InstantiateMsg {
-            operator: "operator".to_string(),
-            reward_distributor: "distributor".to_string(),
-            drand_oracle: "oracle".to_string(),
+            operator: mock_api.addr_make("operator").to_string(),
+            reward_distributor: mock_api.addr_make("distributor").to_string(),
+            drand_oracle: mock_api.addr_make("oracle").to_string(),
             validators: vec!["val1".to_string(), "val2".to_string()],
             epoch_duration_seconds: 86400,
             protocol_fee_bps: 500,
-            treasury: "treasury".to_string(),
+            treasury: mock_api.addr_make("treasury").to_string(),
             base_yield_bps: 500,
             regular_pool_bps: 7000,
             big_pool_bps: 2000,
@@ -151,8 +152,10 @@ mod tests {
     }
 
     fn setup_contract(deps: DepsMut) {
+        let mock_api = MockApi::default();
         let msg = default_instantiate_msg();
-        let info = mock_info("admin", &[]);
+        let admin = mock_api.addr_make("admin");
+        let info = message_info(&admin, &[]);
         instantiate(deps, mock_env(), info, msg).unwrap();
     }
 
@@ -161,9 +164,11 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
+        let admin = deps.api.addr_make("admin");
+        let operator = deps.api.addr_make("operator");
         let config = CONFIG.load(deps.as_ref().storage).unwrap();
-        assert_eq!(config.admin.as_str(), "admin");
-        assert_eq!(config.operator.as_str(), "operator");
+        assert_eq!(config.admin, admin);
+        assert_eq!(config.operator, operator);
         assert!(config.csinj_denom.contains("csINJ"));
         assert_eq!(config.validators.len(), 2);
 
@@ -180,7 +185,8 @@ mod tests {
         let mut deps = mock_dependencies();
         let mut msg = default_instantiate_msg();
         msg.regular_pool_bps = 8000; // Sum would be 11000
-        let info = mock_info("admin", &[]);
+        let admin = deps.api.addr_make("admin");
+        let info = message_info(&admin, &[]);
         let err = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap_err();
         assert!(matches!(err, ContractError::BpsSumMismatch { .. }));
     }
@@ -190,7 +196,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("user1", &coins(100_000_000, "inj"));
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(100_000_000, "inj"));
         let res = execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
 
         // Should have mint message + delegation messages
@@ -212,7 +219,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("user1", &[]);
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &[]);
         let err = execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap_err();
         assert!(matches!(err, ContractError::NoFundsSent));
     }
@@ -222,7 +230,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("user1", &coins(100, "usdt"));
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(100, "usdt"));
         let err = execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap_err();
         assert!(matches!(err, ContractError::WrongDenom { .. }));
     }
@@ -233,7 +242,8 @@ mod tests {
         setup_contract(deps.as_mut());
 
         // First stake at rate 1.0
-        let info = mock_info("user1", &coins(100_000_000, "inj"));
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(100_000_000, "inj"));
         execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
 
         // Manually increase exchange rate to 2.0
@@ -242,7 +252,8 @@ mod tests {
             .unwrap();
 
         // Second stake at rate 2.0 — should get half the csINJ
-        let info2 = mock_info("user2", &coins(100_000_000, "inj"));
+        let user2 = deps.api.addr_make("user2");
+        let info2 = message_info(&user2, &coins(100_000_000, "inj"));
         execute(deps.as_mut(), mock_env(), info2, ExecuteMsg::Stake {}).unwrap();
 
         let supply = TOTAL_CSINJ_SUPPLY.load(deps.as_ref().storage).unwrap();
@@ -256,14 +267,16 @@ mod tests {
         setup_contract(deps.as_mut());
 
         // First stake
-        let info = mock_info("user1", &coins(100_000_000, "inj"));
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(100_000_000, "inj"));
         execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
 
         // Get the csINJ denom
         let config = CONFIG.load(deps.as_ref().storage).unwrap();
 
         // Unstake half
-        let info = mock_info("user1", &[Coin::new(50_000_000u128, &config.csinj_denom)]);
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &[Coin::new(50_000_000u128, &config.csinj_denom)]);
         let res = execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Unstake {}).unwrap();
 
         // Should have burn message + undelegation messages
@@ -277,7 +290,7 @@ mod tests {
         assert_eq!(supply, Uint128::from(50_000_000u128));
 
         // Check unstake request created
-        let addr = deps.api.addr_validate("user1").unwrap();
+        let addr = deps.api.addr_make("user1");
         let request = UNSTAKE_REQUESTS
             .load(deps.as_ref().storage, (&addr, 0))
             .unwrap();
@@ -291,17 +304,20 @@ mod tests {
         setup_contract(deps.as_mut());
 
         // Stake
-        let info = mock_info("user1", &coins(100_000_000, "inj"));
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(100_000_000, "inj"));
         execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
 
         let config = CONFIG.load(deps.as_ref().storage).unwrap();
 
         // Unstake
-        let info = mock_info("user1", &[Coin::new(50_000_000u128, &config.csinj_denom)]);
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &[Coin::new(50_000_000u128, &config.csinj_denom)]);
         execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Unstake {}).unwrap();
 
         // Try to claim immediately — should fail
-        let info = mock_info("user1", &[]);
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &[]);
         let err = execute(
             deps.as_mut(),
             mock_env(),
@@ -320,20 +336,23 @@ mod tests {
         setup_contract(deps.as_mut());
 
         // Stake
-        let info = mock_info("user1", &coins(100_000_000, "inj"));
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(100_000_000, "inj"));
         execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
 
         let config = CONFIG.load(deps.as_ref().storage).unwrap();
 
         // Unstake
-        let info = mock_info("user1", &[Coin::new(50_000_000u128, &config.csinj_denom)]);
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &[Coin::new(50_000_000u128, &config.csinj_denom)]);
         execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Unstake {}).unwrap();
 
         // Fast forward past 21 days
         let mut env = mock_env();
         env.block.time = Timestamp::from_seconds(env.block.time.seconds() + 22 * 24 * 60 * 60);
 
-        let info = mock_info("user1", &[]);
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &[]);
         let res = execute(
             deps.as_mut(),
             env,
@@ -348,7 +367,7 @@ mod tests {
         assert_eq!(res.messages.len(), 1);
 
         // Check request marked as claimed
-        let addr = deps.api.addr_validate("user1").unwrap();
+        let addr = deps.api.addr_make("user1");
         let request = UNSTAKE_REQUESTS
             .load(deps.as_ref().storage, (&addr, 0))
             .unwrap();
@@ -360,7 +379,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("random_user", &coins(1000, "inj"));
+        let random_user = deps.api.addr_make("random_user");
+        let info = message_info(&random_user, &coins(1000, "inj"));
         let err = execute(
             deps.as_mut(),
             mock_env(),
@@ -377,11 +397,13 @@ mod tests {
         setup_contract(deps.as_mut());
 
         // Stake first so there's backing
-        let info = mock_info("user1", &coins(1_000_000_000, "inj"));
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(1_000_000_000, "inj"));
         execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
 
         // Advance epoch with rewards
-        let info = mock_info("operator", &coins(100_000_000, "inj"));
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &coins(100_000_000, "inj"));
         let res = execute(
             deps.as_mut(),
             mock_env(),
@@ -414,10 +436,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info(
-            "operator",
-            &[],
-        );
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
         let res = execute(
             deps.as_mut(),
             mock_env(),
@@ -446,7 +466,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("operator", &[]);
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
         execute(
             deps.as_mut(),
             mock_env(),
@@ -481,7 +502,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("admin", &[]);
+        let admin = deps.api.addr_make("admin");
+        let info = message_info(&admin, &[]);
         execute(
             deps.as_mut(),
             mock_env(),
@@ -502,7 +524,8 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let info = mock_info("random", &[]);
+        let random = deps.api.addr_make("random");
+        let info = message_info(&random, &[]);
         let err = execute(
             deps.as_mut(),
             mock_env(),
