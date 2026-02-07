@@ -1,5 +1,6 @@
 use chance_staking_common::merkle::{compute_leaf_hash, verify_merkle_proof};
 use cosmwasm_std::{to_json_binary, Binary, Deps, Order, StdResult, Uint128};
+use cw_storage_plus::Bound;
 
 use crate::state::{
     CONFIG, DRAWS, DRAW_STATE, SNAPSHOTS, USER_TOTAL_WON, USER_WINS,
@@ -27,7 +28,7 @@ pub fn query_draw_history(
     limit: Option<u32>,
 ) -> StdResult<Binary> {
     let limit = limit.unwrap_or(20).min(100) as usize;
-    let start = start_after.map(|s| cosmwasm_std::Bound::exclusive(s));
+    let start = start_after.map(Bound::exclusive);
 
     let draws: Vec<_> = DRAWS
         .range(deps.storage, start, None, Order::Ascending)
@@ -94,7 +95,7 @@ pub fn query_user_win_details(
 }
 
 pub fn query_verify_inclusion(
-    deps: Deps,
+    _deps: Deps,
     merkle_root: String,
     proof: Vec<String>,
     leaf_address: String,

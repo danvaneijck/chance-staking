@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 use crate::error::ContractError;
 use crate::msg::OracleQueryMsg;
 use crate::state::{
-    Draw, DrawStateInfo, Snapshot, CONFIG, DRAWS, DRAW_STATE, SNAPSHOTS, USER_TOTAL_WON,
+    Draw, Snapshot, CONFIG, DRAWS, DRAW_STATE, SNAPSHOTS, USER_TOTAL_WON,
     USER_WINS,
 };
 

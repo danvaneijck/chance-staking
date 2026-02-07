@@ -1,3 +1,4 @@
+use drand_verify::Pubkey;
 use sha2::{Digest, Sha256};
 
 /// Quicknet public key (G2, 96 bytes) — hex encoded.
@@ -29,8 +30,7 @@ impl std::fmt::Display for VerifyError {
 /// Returns 32-byte randomness = sha256(signature) on success.
 ///
 /// Uses drand-verify's pure-Rust BLS12-381 implementation.
-/// This does NOT call cosmwasm_std's bls12_381_hash_to_g1 or
-/// bls12_381_pairing_equality (which are not implemented on Injective).
+/// Quicknet uses scheme bls-unchained-g1-rfc9380, so we use G2PubkeyFastnet.
 pub fn verify_quicknet_beacon(
     pubkey_bytes: &[u8],
     round: u64,
@@ -41,7 +41,9 @@ pub fn verify_quicknet_beacon(
         .try_into()
         .map_err(|_| VerifyError::InvalidPubkeyLength)?;
 
-    let pk = drand_verify::G2Pubkey::from_fixed(pk_fixed)
+    // Use G2PubkeyFastnet for quicknet (bls-unchained-g1-rfc9380)
+    // The Pubkey trait must be in scope to call from_fixed()
+    let pk = drand_verify::G2PubkeyFastnet::from_fixed(pk_fixed)
         .map_err(|_| VerifyError::InvalidPubkey)?;
 
     // Quicknet is unchained: previous_signature is empty
