@@ -118,10 +118,18 @@ store_code() {
 }
 
 # Instantiate a contract and echo the contract address.
+# Usage: instantiate_contract <code_id> <init_msg> <label> [amount]
 instantiate_contract() {
     local code_id="$1"
     local init_msg="$2"
     local label="$3"
+    local amount="${4:-}"
+
+    local amount_flag=""
+    if [ -n "$amount" ]; then
+        amount_flag="--amount=$amount"
+        echo "  > Sending $amount with instantiation"
+    fi
 
     echo "  Instantiating $label (code $code_id)..." >&2
     local inst_response
@@ -131,6 +139,7 @@ instantiate_contract() {
         --from="$FROM" \
         --chain-id="$CHAIN_ID" \
         --yes --fees="$FEES" --gas="$GAS" \
+        $amount_flag \
         --node="$NODE" --output text 2>&1)
 
     if ! echo "$inst_response" | grep -q "txhash"; then
@@ -265,7 +274,8 @@ EOF
 )
 STAKING_HUB_INIT_MSG=$(echo "$STAKING_HUB_INIT_MSG" | tr -d '\n' | tr -s ' ')
 
-STAKING_HUB_ADDRESS=$(instantiate_contract "$STAKING_HUB_CODE_ID" "$STAKING_HUB_INIT_MSG" "Chance Staking Hub v1.0")
+# Token Factory denom creation requires 1 INJ fee on testnet (0.1 INJ on mainnet)
+STAKING_HUB_ADDRESS=$(instantiate_contract "$STAKING_HUB_CODE_ID" "$STAKING_HUB_INIT_MSG" "Chance Staking Hub v1.0" "1000000000000000000inj")
 echo ""
 
 # ── 5. Update reward-distributor ────────────────────────────────────────────
