@@ -18,6 +18,11 @@ type ContractResponse = cosmwasm_std::Response<InjectiveMsgWrapper>;
 /// 21 days in seconds for unbonding period
 const UNBONDING_PERIOD_SECS: u64 = 21 * 24 * 60 * 60;
 
+/// 10^18 — the internal scaling factor used by cosmwasm_std::Decimal.
+/// Decimal stores `value * 10^18` in its atomics. We use this to convert
+/// a Decimal back to Uint128 by dividing atomics by this constant.
+const DECIMAL_FRACTIONAL: Uint128 = Uint128::new(1_000_000_000_000_000_000u128);
+
 /// Create the Token Factory denom during instantiation.
 pub fn create_denom(
     env: &Env,
@@ -29,13 +34,11 @@ pub fn create_denom(
     Ok((msg, full_denom))
 }
 
-/// Helper: convert a Decimal to Uint128 by truncating fractional part.
-/// Decimal internally stores value * 10^18, so we divide atomics by DECIMAL_FRACTIONAL.
+/// Convert a Decimal to Uint128 by truncating the fractional part.
+/// Decimal internally stores `value * 10^18`, so we divide atomics by 10^18.
 #[inline]
 fn decimal_to_uint128(d: Decimal) -> Uint128 {
-    // Decimal::atomics() returns the raw u128 representation (value * 10^18).
-    // Decimal::DECIMAL_FRACTIONAL is 10^18.
-    d.atomics() / Decimal::DECIMAL_FRACTIONAL
+    d.atomics() / DECIMAL_FRACTIONAL
 }
 
 /// Stake INJ → mint csINJ at current exchange rate.
@@ -68,7 +71,6 @@ pub fn stake(
     // Calculate csINJ to mint: inj_amount / exchange_rate
     // exchange_rate = total_inj_backing / total_csinj_supply
     // csinj_to_mint = inj_amount / exchange_rate
-    // Using Decimal arithmetic: build a Decimal, divide, then extract Uint128.
     let csinj_decimal = Decimal::from_ratio(inj_amount, 1u128) / exchange_rate;
     let csinj_amount = decimal_to_uint128(csinj_decimal);
 
@@ -147,7 +149,6 @@ pub fn unstake(
     let exchange_rate = EXCHANGE_RATE.load(deps.storage)?;
 
     // Calculate INJ to return: csinj_amount * exchange_rate
-    // Using Decimal arithmetic then extracting Uint128.
     let inj_decimal = Decimal::from_ratio(csinj_amount, 1u128) * exchange_rate;
     let inj_amount = decimal_to_uint128(inj_decimal);
 
@@ -282,9 +283,7 @@ pub fn advance_epoch(
 
     let mut epoch_state = EPOCH_STATE.load(deps.storage)?;
 
-    // In a real deployment, we'd query actual staking rewards.
-    // For the contract logic, the operator sends the claimed rewards as funds.
-    // The rewards are whatever INJ was sent with this message.
+    // The operator sends the claimed rewards as funds.
     let total_rewards = info
         .funds
         .iter()
@@ -292,8 +291,7 @@ pub fn advance_epoch(
         .map(|c| c.amount)
         .unwrap_or(Uint128::zero());
 
-    // Split rewards according to basis points using Uint128::multiply_ratio
-    // This avoids Decimal entirely and is the idiomatic CosmWasm approach.
+    // Split rewards according to basis points using Uint128::multiply_ratio.
     let regular_amount = total_rewards.multiply_ratio(config.regular_pool_bps as u128, 10000u128);
     let big_amount = total_rewards.multiply_ratio(config.big_pool_bps as u128, 10000u128);
     let base_yield = total_rewards.multiply_ratio(config.base_yield_bps as u128, 10000u128);
@@ -373,7 +371,6 @@ pub fn advance_epoch(
 }
 
 /// Submit a snapshot merkle root for the current epoch. Operator only.
-/// This also forwards the snapshot to the reward distributor.
 pub fn take_snapshot(
     deps: DepsMut,
     _env: Env,
@@ -516,7 +513,7 @@ fn create_delegation_msgs(
     for (i, validator) in validators.iter().enumerate() {
         let mut amount = per_validator;
         if i == 0 {
-            amount += remainder; // First validator gets the remainder
+            amount += remainder;
         }
         if !amount.is_zero() {
             msgs.push(CosmosMsg::Staking(StakingMsg::Delegate {
