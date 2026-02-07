@@ -4,6 +4,7 @@ members = [
     "contracts/reward-distributor",
     "contracts/drand-oracle",
     "packages/chance-staking-common",
+    "tests/integration",
 ]
 resolver = "2"
 
@@ -43,15 +44,5 @@ drand-verify = { version = "0.6.2" }
 # ── Internal packages ──
 chance-staking-common = { path = "packages/chance-staking-common" }
 
-[[test]]
-name = "integration"
-path = "tests/integration.rs"
-harness = true
-
-[dev-dependencies]
-injective-test-tube = { version = "1.16.3-1" }
-serde_json = { version = "1.0.140" }
-cosmwasm-std = { version = "2.2.2" }
-chance-staking-common = { path = "packages/chance-staking-common" }
-sha2 = { version = "0.10" }
-hex = { version = "0.4.3" }
+[workspace.dependencies.injective-test-tube]
+version = "1.16.3-1"

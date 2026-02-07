@@ -1,0 +1,18 @@
+[package]
+name = "chance-staking-integration-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[test]]
+name = "integration"
+path = "src/tests.rs"
+harness = true
+
+[dependencies]
+cosmwasm-std = { workspace = true }
+chance-staking-common = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+injective-test-tube = { workspace = true }
