@@ -85,19 +85,22 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, message_info, MockApi};
     use crate::{state::BEACONS, verify::QUICKNET_PK_HEX};
 
     fn setup_contract(deps: DepsMut) {
+        let mock_api = MockApi::default();
+        let admin = mock_api.addr_make("admin");
+        let operator1 = mock_api.addr_make("operator1");
         let msg = InstantiateMsg {
-            operators: vec!["operator1".to_string()],
+            operators: vec![operator1.to_string()],
             quicknet_pubkey_hex: QUICKNET_PK_HEX.to_string(),
             chain_hash: "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
                 .to_string(),
             genesis_time: 1692803367,
             period_seconds: 3,
         };
-        let info = mock_info("admin", &[]);
+        let info = message_info(&admin, &[]);
         instantiate(deps, mock_env(), info, msg).unwrap();
     }
 
@@ -106,8 +109,9 @@ mod tests {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
+        let admin = deps.api.addr_make("admin");
         let config = CONFIG.load(deps.as_ref().storage).unwrap();
-        assert_eq!(config.admin.as_str(), "admin");
+        assert_eq!(config.admin, admin);
         assert_eq!(config.operators.len(), 1);
         assert_eq!(config.period_seconds, 3);
         assert_eq!(config.quicknet_pubkey.len(), 96);
@@ -122,7 +126,8 @@ mod tests {
             round: 1000,
             signature_hex: "b44679b9a59af2ec876b1a6b1ad52ea9b1615fc3982b19576350f93447cb1125e342b73a8dd2bacbe47e4b6b63ed5e39".to_string(),
         };
-        let info = mock_info("random_user", &[]);
+        let random_user = deps.api.addr_make("random_user");
+        let info = message_info(&random_user, &[]);
         let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
         assert!(matches!(err, ContractError::Unauthorized { .. }));
     }
@@ -136,7 +141,8 @@ mod tests {
             round: 1000,
             signature_hex: "b44679b9a59af2ec876b1a6b1ad52ea9b1615fc3982b19576350f93447cb1125e342b73a8dd2bacbe47e4b6b63ed5e39".to_string(),
         };
-        let info = mock_info("operator1", &[]);
+        let operator1 = deps.api.addr_make("operator1");
+        let info = message_info(&operator1, &[]);
         let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
         // Check attributes
@@ -164,7 +170,8 @@ mod tests {
             round: 1000,
             signature_hex: "b44679b9a59af2ec876b1a6b1ad52ea9b1615fc3982b19576350f93447cb1125e342b73a8dd2bacbe47e4b6b63ed5e39".to_string(),
         };
-        let info = mock_info("operator1", &[]);
+        let operator1 = deps.api.addr_make("operator1");
+        let info = message_info(&operator1, &[]);
         execute(deps.as_mut(), mock_env(), info.clone(), msg.clone()).unwrap();
 
         // Second submission should fail
@@ -182,7 +189,8 @@ mod tests {
             round: 1000,
             signature_hex: "b44679b9a59af2ec876b1a6b1ad52ea9b1615fc3982b19576350f93447cb1125e342b73a8dd2bacbe47e4b6b63ed5e39".to_string(),
         };
-        let info = mock_info("operator1", &[]);
+        let operator1 = deps.api.addr_make("operator1");
+        let info = message_info(&operator1, &[]);
         execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
         // Query existing beacon
@@ -218,7 +226,8 @@ mod tests {
             round: 1000,
             signature_hex: "b44679b9a59af2ec876b1a6b1ad52ea9b1615fc3982b19576350f93447cb1125e342b73a8dd2bacbe47e4b6b63ed5e39".to_string(),
         };
-        let info = mock_info("operator1", &[]);
+        let operator1 = deps.api.addr_make("operator1");
+        let info = message_info(&operator1, &[]);
         execute(deps.as_mut(), mock_env(), info, msg_valid).unwrap();
 
         let res = query(deps.as_ref(), mock_env(), QueryMsg::LatestRound {}).unwrap();
@@ -226,7 +235,8 @@ mod tests {
         assert_eq!(round, 1000);
 
         // Verify wrong round fails
-        let info2 = mock_info("operator1", &[]);
+        let operator1 = deps.api.addr_make("operator1");
+        let info2 = message_info(&operator1, &[]);
         let err = execute(deps.as_mut(), mock_env(), info2, msg).unwrap_err();
         assert!(matches!(err, ContractError::VerificationFailed { .. }));
     }
