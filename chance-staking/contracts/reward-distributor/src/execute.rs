@@ -465,6 +465,7 @@ pub fn update_config(
     _env: Env,
     info: MessageInfo,
     operator: Option<String>,
+    staking_hub: Option<String>,
     reveal_deadline_seconds: Option<u64>,
     regular_draw_reward: Option<Uint128>,
     big_draw_reward: Option<Uint128>,
@@ -479,6 +480,9 @@ pub fn update_config(
 
     if let Some(op) = operator {
         config.operator = deps.api.addr_validate(&op)?;
+    }
+    if let Some(hub) = staking_hub {
+        config.staking_hub = deps.api.addr_validate(&hub)?;
     }
     if let Some(deadline) = reveal_deadline_seconds {
         config.reveal_deadline_seconds = deadline;
