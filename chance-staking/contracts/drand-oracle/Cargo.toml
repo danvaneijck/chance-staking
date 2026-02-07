@@ -23,5 +23,4 @@ drand-verify = { workspace = true }
 chance-staking-common = { workspace = true }
 
 [dev-dependencies]
-cosmwasm-std = { workspace = true, features = ["testing"] }
 serde_json = { workspace = true }
