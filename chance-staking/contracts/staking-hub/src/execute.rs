@@ -29,6 +29,15 @@ pub fn create_denom(
     Ok((msg, full_denom))
 }
 
+/// Helper: convert a Decimal to Uint128 by truncating fractional part.
+/// Decimal internally stores value * 10^18, so we divide atomics by DECIMAL_FRACTIONAL.
+#[inline]
+fn decimal_to_uint128(d: Decimal) -> Uint128 {
+    // Decimal::atomics() returns the raw u128 representation (value * 10^18).
+    // Decimal::DECIMAL_FRACTIONAL is 10^18.
+    d.atomics() / Decimal::DECIMAL_FRACTIONAL
+}
+
 /// Stake INJ → mint csINJ at current exchange rate.
 pub fn stake(
     deps: DepsMut,
@@ -57,9 +66,11 @@ pub fn stake(
     let exchange_rate = EXCHANGE_RATE.load(deps.storage)?;
 
     // Calculate csINJ to mint: inj_amount / exchange_rate
-    // Convert to Decimal for division, then back to Uint128
-    let csinj_amount = Decimal::from_ratio(inj_amount, 1u128) / exchange_rate;
-    let csinj_amount = csinj_amount * Uint128::one();
+    // exchange_rate = total_inj_backing / total_csinj_supply
+    // csinj_to_mint = inj_amount / exchange_rate
+    // Using Decimal arithmetic: build a Decimal, divide, then extract Uint128.
+    let csinj_decimal = Decimal::from_ratio(inj_amount, 1u128) / exchange_rate;
+    let csinj_amount = decimal_to_uint128(csinj_decimal);
 
     // Update totals
     let new_backing = TOTAL_INJ_BACKING.load(deps.storage)? + inj_amount;
@@ -136,8 +147,9 @@ pub fn unstake(
     let exchange_rate = EXCHANGE_RATE.load(deps.storage)?;
 
     // Calculate INJ to return: csinj_amount * exchange_rate
-    let inj_amount = Decimal::from_ratio(csinj_amount, 1u128) * exchange_rate;
-    let inj_amount = inj_amount * Uint128::one();
+    // Using Decimal arithmetic then extracting Uint128.
+    let inj_decimal = Decimal::from_ratio(csinj_amount, 1u128) * exchange_rate;
+    let inj_amount = decimal_to_uint128(inj_decimal);
 
     // Update totals
     let new_backing = TOTAL_INJ_BACKING
@@ -158,7 +170,8 @@ pub fn unstake(
     EPOCH_STATE.save(deps.storage, &epoch_state)?;
 
     // Create unstake request
-    let unlock_time = cosmwasm_std::Timestamp::from_seconds(env.block.time.seconds() + UNBONDING_PERIOD_SECS);
+    let unlock_time =
+        cosmwasm_std::Timestamp::from_seconds(env.block.time.seconds() + UNBONDING_PERIOD_SECS);
     let request_id = NEXT_UNSTAKE_ID
         .may_load(deps.storage, &info.sender)?
         .unwrap_or(0);
@@ -279,18 +292,12 @@ pub fn advance_epoch(
         .map(|c| c.amount)
         .unwrap_or(Uint128::zero());
 
-    // Split rewards according to basis points
-    let regular_amount = Decimal::from_ratio(config.regular_pool_bps as u128, 10000u128) * Decimal::from_ratio(total_rewards, 1u128);
-    let regular_amount = regular_amount * Uint128::one();
-    
-    let big_amount = Decimal::from_ratio(config.big_pool_bps as u128, 10000u128) * Decimal::from_ratio(total_rewards, 1u128);
-    let big_amount = big_amount * Uint128::one();
-    
-    let base_yield = Decimal::from_ratio(config.base_yield_bps as u128, 10000u128) * Decimal::from_ratio(total_rewards, 1u128);
-    let base_yield = base_yield * Uint128::one();
-    
-    let treasury_fee = Decimal::from_ratio(config.protocol_fee_bps as u128, 10000u128) * Decimal::from_ratio(total_rewards, 1u128);
-    let treasury_fee = treasury_fee * Uint128::one();
+    // Split rewards according to basis points using Uint128::multiply_ratio
+    // This avoids Decimal entirely and is the idiomatic CosmWasm approach.
+    let regular_amount = total_rewards.multiply_ratio(config.regular_pool_bps as u128, 10000u128);
+    let big_amount = total_rewards.multiply_ratio(config.big_pool_bps as u128, 10000u128);
+    let base_yield = total_rewards.multiply_ratio(config.base_yield_bps as u128, 10000u128);
+    let treasury_fee = total_rewards.multiply_ratio(config.protocol_fee_bps as u128, 10000u128);
 
     // Update exchange rate with base yield
     let total_backing = TOTAL_INJ_BACKING.load(deps.storage)?;

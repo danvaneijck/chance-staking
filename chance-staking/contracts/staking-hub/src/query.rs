@@ -36,7 +36,7 @@ pub fn query_unstake_requests(deps: Deps, address: String) -> StdResult<Binary> 
 
     let mut entries = Vec::new();
     for id in 0..next_id {
-        if let request = UNSTAKE_REQUESTS.may_load(deps.storage, (&addr, id))? {
+        if let Some(request) = UNSTAKE_REQUESTS.may_load(deps.storage, (&addr, id))? {
             entries.push(UnstakeRequestEntry { id, request });
         }
     }
