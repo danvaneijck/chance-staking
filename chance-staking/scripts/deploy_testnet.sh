@@ -65,50 +65,55 @@ STAKING_HUB_WASM="./artifacts/chance_staking_hub.wasm"
 ################################################################################
 
 # Store a wasm binary and echo the code ID.
-# Usage: store_code <wasm_file> <label>
 store_code() {
     local wasm_file="$1"
     local label="$2"
 
     if [ ! -f "$wasm_file" ]; then
-        echo "  ERROR: Wasm file not found: $wasm_file"
-        echo "  Build artifacts first with the CosmWasm optimizer."
+        echo "  ERROR: Wasm file not found: $wasm_file" >&2
         exit 1
     fi
 
-    echo "  Storing $label..."
+    echo "  Storing $label..." >&2
     local store_response
     store_response=$(yes "$PASSWORD" | injectived tx wasm store "$wasm_file" \
         --from="$FROM" \
         --chain-id="$CHAIN_ID" \
         --yes --fees="$FEES" --gas="$GAS" \
-        --node="$NODE" 2>&1)
+        --node="$NODE" --output text 2>&1)
 
     if ! echo "$store_response" | grep -q "txhash"; then
-        echo "  ERROR: Failed to submit store transaction for $label."
-        echo "$store_response"
+        echo "  ERROR: Failed to submit store transaction for $label." >&2
+        echo "$store_response" >&2
         exit 1
     fi
 
     local txhash
     txhash=$(echo "$store_response" | grep 'txhash:' | awk '{print $2}')
-    echo "  > Store tx: $txhash"
-    echo "  > Waiting for indexing..."
-    sleep 10
+    echo "  > Store tx: $txhash" >&2
+    echo "  > Waiting for indexing..." >&2
+    sleep 8
 
     local query_output
-    query_output=$(injectived query tx "$txhash" --node="$NODE" 2>&1)
+    query_output=$(injectived query tx "$txhash" --node="$NODE" --output text 2>&1)
 
+    # Parsing Code ID:
+    # 1. Grep for "key: code_id" and the next line
+    # 2. Grep for "value:"
+    # 3. Awk to get the last field (the ID)
+    # 4. Head -n 1 to ensure we only get the FIRST match (avoids duplicates)
+    # 5. tr to remove double quotes and single quotes
     local code_id
-    code_id=$(echo "$query_output" | grep -A 1 'key: code_id' | grep 'value:' | head -1 | sed 's/.*value: "\(.*\)".*/\1/')
+    code_id=$(echo "$query_output" | grep -A 1 'key: code_id' | grep 'value:' | awk '{print $NF}' | head -n 1 | tr -d '"' | tr -d "'")
 
     if [ -z "$code_id" ]; then
-        echo "  ERROR: Could not extract Code ID for $label from tx: $txhash"
-        echo "  Check the transaction on the explorer."
+        echo "  ERROR: Could not extract Code ID for $label from tx: $txhash" >&2
+        echo "  Raw output:" >&2
+        echo "$query_output" >&2
         exit 1
     fi
 
-    echo "  Code ID: $code_id"
+    echo "  Code ID: $code_id" >&2
     echo "$code_id"
 }
 
@@ -120,13 +125,13 @@ instantiate_contract() {
     local label="$3"
     local amount="${4:-}"
 
-    echo "  Instantiating $label (code $code_id)..."
     local amount_flag=""
     if [ -n "$amount" ]; then
         amount_flag="--amount=$amount"
         echo "  > Sending $amount with instantiation"
     fi
 
+    echo "  Instantiating $label (code $code_id)..." >&2
     local inst_response
     inst_response=$(yes "$PASSWORD" | injectived tx wasm instantiate "$code_id" "$init_msg" \
         --label="$label" \
@@ -135,33 +140,40 @@ instantiate_contract() {
         --chain-id="$CHAIN_ID" \
         --yes --fees="$FEES" --gas="$GAS" \
         $amount_flag \
-        --node="$NODE" 2>&1)
+        --node="$NODE" --output text 2>&1)
 
     if ! echo "$inst_response" | grep -q "txhash"; then
-        echo "  ERROR: Failed to submit instantiate transaction for $label."
-        echo "$inst_response"
+        echo "  ERROR: Failed to submit instantiate transaction for $label." >&2
+        echo "$inst_response" >&2
         exit 1
     fi
 
     local txhash
     txhash=$(echo "$inst_response" | grep 'txhash:' | awk '{print $2}')
-    echo "  > Instantiate tx: $txhash"
-    echo "  > Waiting for indexing..."
-    sleep 10
+    echo "  > Instantiate tx: $txhash" >&2
+    echo "  > Waiting for indexing..." >&2
+    sleep 8
 
     local query_output
-    query_output=$(injectived query tx "$txhash" --node="$NODE" 2>&1)
+    query_output=$(injectived query tx "$txhash" --node="$NODE" --output text 2>&1)
 
+    # Parsing Contract Address:
+    # 1. Grep for "key: _contract_address"
+    # 2. Get value line
+    # 3. Awk last field
+    # 4. Head -n 1 to avoid duplicates from multiple events
+    # 5. tr to clean quotes
     local contract_address
-    contract_address=$(echo "$query_output" | grep -A 1 'key: _contract_address' | grep 'value:' | head -1 | sed 's/.*value: "\(.*\)".*/\1/')
+    contract_address=$(echo "$query_output" | grep -A 1 'key: _contract_address' | grep 'value:' | awk '{print $NF}' | head -n 1 | tr -d '"' | tr -d "'")
 
-    if [ -z "$contract_address" ]; then
-        echo "  ERROR: Could not extract contract address for $label from tx: $txhash"
-        echo "  Check the transaction on the explorer."
+    if [[ -z "$contract_address" || "$contract_address" != inj* ]]; then
+        echo "  ERROR: Could not extract contract address for $label from tx: $txhash" >&2
+        echo "  Raw output snippet:" >&2
+        echo "$query_output" | grep -A 5 "instantiate" >&2
         exit 1
     fi
 
-    echo "  Contract address: $contract_address"
+    echo "  Contract address: $contract_address" >&2
     echo "$contract_address"
 }
 
@@ -177,9 +189,6 @@ echo ""
 echo "  Chain:     $CHAIN_ID"
 echo "  Node:      $NODE"
 echo "  Signer:    $FROM"
-echo "  Admin:     $ADMIN_ADDRESS"
-echo "  Operator:  $OPERATOR_ADDRESS"
-echo "  Treasury:  $TREASURY_ADDRESS"
 echo ""
 
 # ── 1. Store all wasm codes ──────────────────────────────────────────────────
@@ -189,19 +198,16 @@ echo "  STEP 1: Storing Wasm codes"
 echo "-------------------------------------------------"
 
 DRAND_CODE_ID=$(store_code "$DRAND_ORACLE_WASM" "drand-oracle")
-echo ""
 DISTRIBUTOR_CODE_ID=$(store_code "$REWARD_DISTRIBUTOR_WASM" "reward-distributor")
-echo ""
 STAKING_HUB_CODE_ID=$(store_code "$STAKING_HUB_WASM" "staking-hub")
 echo ""
-
 echo "  Stored code IDs:"
 echo "    drand-oracle:       $DRAND_CODE_ID"
 echo "    reward-distributor: $DISTRIBUTOR_CODE_ID"
 echo "    staking-hub:        $STAKING_HUB_CODE_ID"
 echo ""
 
-# ── 2. Instantiate drand-oracle (no dependencies) ───────────────────────────
+# ── 2. Instantiate drand-oracle ─────────────────────────────────────────────
 
 echo "-------------------------------------------------"
 echo "  STEP 2: Instantiating drand-oracle"
@@ -217,13 +223,12 @@ DRAND_INIT_MSG=$(cat <<EOF
 }
 EOF
 )
-# Compact to single line for CLI
 DRAND_INIT_MSG=$(echo "$DRAND_INIT_MSG" | tr -d '\n' | tr -s ' ')
 
 DRAND_ORACLE_ADDRESS=$(instantiate_contract "$DRAND_CODE_ID" "$DRAND_INIT_MSG" "Chance Drand Oracle v1.0")
 echo ""
 
-# ── 3. Instantiate reward-distributor (needs drand_oracle) ──────────────────
+# ── 3. Instantiate reward-distributor ───────────────────────────────────────
 
 echo "-------------------------------------------------"
 echo "  STEP 3: Instantiating reward-distributor"
@@ -242,12 +247,10 @@ EOF
 )
 DISTRIBUTOR_INIT_MSG=$(echo "$DISTRIBUTOR_INIT_MSG" | tr -d '\n' | tr -s ' ')
 
-# NOTE: staking_hub is set to ADMIN_ADDRESS as a placeholder.
-# After staking-hub is deployed, update it via UpdateConfig or migrate.
 REWARD_DISTRIBUTOR_ADDRESS=$(instantiate_contract "$DISTRIBUTOR_CODE_ID" "$DISTRIBUTOR_INIT_MSG" "Chance Reward Distributor v1.0")
 echo ""
 
-# ── 4. Instantiate staking-hub (needs reward_distributor + drand_oracle) ────
+# ── 4. Instantiate staking-hub ──────────────────────────────────────────────
 
 echo "-------------------------------------------------"
 echo "  STEP 4: Instantiating staking-hub"
@@ -275,18 +278,13 @@ STAKING_HUB_INIT_MSG=$(echo "$STAKING_HUB_INIT_MSG" | tr -d '\n' | tr -s ' ')
 STAKING_HUB_ADDRESS=$(instantiate_contract "$STAKING_HUB_CODE_ID" "$STAKING_HUB_INIT_MSG" "Chance Staking Hub v1.0" "1000000000000000000inj")
 echo ""
 
-# ── 5. Update reward-distributor's staking_hub to the real address ──────────
+# ── 5. Update reward-distributor ────────────────────────────────────────────
 
 echo "-------------------------------------------------"
 echo "  STEP 5: Updating reward-distributor staking_hub"
 echo "-------------------------------------------------"
-
-# The reward-distributor was instantiated with a placeholder staking_hub.
-# If UpdateConfig supports changing staking_hub, call it here.
-# Otherwise this step must be done manually or via contract migration.
 echo "  NOTE: The reward-distributor was instantiated with staking_hub=$ADMIN_ADDRESS"
 echo "  You may need to update it to the real staking-hub address: $STAKING_HUB_ADDRESS"
-echo "  via an UpdateConfig or migrate transaction."
 echo ""
 
 ################################################################################
@@ -305,9 +303,5 @@ printf "  %-28s %s\n" "reward-distributor address:" "$REWARD_DISTRIBUTOR_ADDRESS
 echo ""
 printf "  %-28s %s\n" "staking-hub code ID:" "$STAKING_HUB_CODE_ID"
 printf "  %-28s %s\n" "staking-hub address:" "$STAKING_HUB_ADDRESS"
-echo ""
-printf "  %-28s %s\n" "Admin:" "$ADMIN_ADDRESS"
-printf "  %-28s %s\n" "Operator:" "$OPERATOR_ADDRESS"
-printf "  %-28s %s\n" "Treasury:" "$TREASURY_ADDRESS"
 echo ""
 echo "================================================="
