@@ -1,0 +1,588 @@
+use cosmwasm_std::{
+    entry_point, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128,
+};
+use cw2::set_contract_version;
+
+use crate::error::ContractError;
+use crate::execute;
+use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use crate::query;
+use crate::state::{DistributorConfig, DrawStateInfo, CONFIG, DRAW_STATE};
+
+const CONTRACT_NAME: &str = "crates.io:chance-reward-distributor";
+const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[entry_point]
+pub fn instantiate(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    msg: InstantiateMsg,
+) -> Result<Response, ContractError> {
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+    let config = DistributorConfig {
+        admin: info.sender.clone(),
+        operator: deps.api.addr_validate(&msg.operator)?,
+        staking_hub: deps.api.addr_validate(&msg.staking_hub)?,
+        drand_oracle: deps.api.addr_validate(&msg.drand_oracle)?,
+        reveal_deadline_seconds: msg.reveal_deadline_seconds,
+        regular_draw_reward: msg.regular_draw_reward,
+        big_draw_reward: msg.big_draw_reward,
+    };
+    CONFIG.save(deps.storage, &config)?;
+
+    let draw_state = DrawStateInfo {
+        next_draw_id: 0,
+        regular_pool_balance: Uint128::zero(),
+        big_pool_balance: Uint128::zero(),
+        total_draws_completed: 0,
+        total_rewards_distributed: Uint128::zero(),
+    };
+    DRAW_STATE.save(deps.storage, &draw_state)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "instantiate")
+        .add_attribute("contract", "reward-distributor")
+        .add_attribute("admin", info.sender.to_string()))
+}
+
+#[entry_point]
+pub fn execute(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    msg: ExecuteMsg,
+) -> Result<Response, ContractError> {
+    match msg {
+        ExecuteMsg::FundRegularPool {} => execute::fund_regular_pool(deps, env, info),
+        ExecuteMsg::FundBigPool {} => execute::fund_big_pool(deps, env, info),
+        ExecuteMsg::SetSnapshot {
+            epoch,
+            merkle_root,
+            total_weight,
+            num_holders,
+        } => execute::set_snapshot(deps, env, info, epoch, merkle_root, total_weight, num_holders),
+        ExecuteMsg::CommitDraw {
+            draw_type,
+            operator_commit,
+            target_drand_round,
+            reward_amount,
+            epoch,
+        } => execute::commit_draw(
+            deps,
+            env,
+            info,
+            draw_type,
+            operator_commit,
+            target_drand_round,
+            reward_amount,
+            epoch,
+        ),
+        ExecuteMsg::RevealDraw {
+            draw_id,
+            operator_secret_hex,
+            winner_address,
+            winner_cumulative_start,
+            winner_cumulative_end,
+            merkle_proof,
+        } => execute::reveal_draw(
+            deps,
+            env,
+            info,
+            draw_id,
+            operator_secret_hex,
+            winner_address,
+            winner_cumulative_start,
+            winner_cumulative_end,
+            merkle_proof,
+        ),
+        ExecuteMsg::ExpireDraw { draw_id } => execute::expire_draw(deps, env, info, draw_id),
+        ExecuteMsg::UpdateConfig {
+            operator,
+            reveal_deadline_seconds,
+            regular_draw_reward,
+            big_draw_reward,
+        } => execute::update_config(
+            deps,
+            env,
+            info,
+            operator,
+            reveal_deadline_seconds,
+            regular_draw_reward,
+            big_draw_reward,
+        ),
+    }
+}
+
+#[entry_point]
+pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+    match msg {
+        QueryMsg::Config {} => query::query_config(deps),
+        QueryMsg::DrawState {} => query::query_draw_state(deps),
+        QueryMsg::Draw { draw_id } => query::query_draw(deps, draw_id),
+        QueryMsg::DrawHistory { start_after, limit } => {
+            query::query_draw_history(deps, start_after, limit)
+        }
+        QueryMsg::PoolBalances {} => query::query_pool_balances(deps),
+        QueryMsg::UserWins { address } => query::query_user_wins(deps, address),
+        QueryMsg::UserWinDetails {
+            address,
+            start_after,
+            limit,
+        } => query::query_user_win_details(deps, address, start_after, limit),
+        QueryMsg::VerifyInclusion {
+            merkle_root,
+            proof,
+            leaf_address,
+            cumulative_start,
+            cumulative_end,
+        } => query::query_verify_inclusion(
+            deps,
+            merkle_root,
+            proof,
+            leaf_address,
+            cumulative_start,
+            cumulative_end,
+        ),
+        QueryMsg::Snapshot { epoch } => query::query_snapshot(deps, epoch),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chance_staking_common::types::{DrawStatus, DrawType};
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::{coins, Timestamp};
+    use sha2::{Digest, Sha256};
+
+    use crate::state::{DRAWS, DRAW_STATE, SNAPSHOTS};
+
+    fn default_instantiate_msg() -> InstantiateMsg {
+        InstantiateMsg {
+            operator: "operator".to_string(),
+            staking_hub: "staking_hub".to_string(),
+            drand_oracle: "drand_oracle".to_string(),
+            reveal_deadline_seconds: 3600,
+            regular_draw_reward: Uint128::from(10_000_000u128),
+            big_draw_reward: Uint128::from(100_000_000u128),
+        }
+    }
+
+    fn setup_contract(deps: DepsMut) {
+        let msg = default_instantiate_msg();
+        let info = mock_info("admin", &[]);
+        instantiate(deps, mock_env(), info, msg).unwrap();
+    }
+
+    #[test]
+    fn test_instantiate() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let config = CONFIG.load(deps.as_ref().storage).unwrap();
+        assert_eq!(config.admin.as_str(), "admin");
+        assert_eq!(config.operator.as_str(), "operator");
+        assert_eq!(config.staking_hub.as_str(), "staking_hub");
+
+        let state = DRAW_STATE.load(deps.as_ref().storage).unwrap();
+        assert_eq!(state.next_draw_id, 0);
+        assert_eq!(state.regular_pool_balance, Uint128::zero());
+    }
+
+    #[test]
+    fn test_fund_regular_pool() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let info = mock_info("staking_hub", &coins(50_000_000, "inj"));
+        let res = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::FundRegularPool {},
+        )
+        .unwrap();
+
+        let state = DRAW_STATE.load(deps.as_ref().storage).unwrap();
+        assert_eq!(state.regular_pool_balance, Uint128::from(50_000_000u128));
+        assert!(res.events.iter().any(|e| e.ty == "chance_pool_funded"));
+    }
+
+    #[test]
+    fn test_fund_pool_unauthorized() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let info = mock_info("random", &coins(50_000_000, "inj"));
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::FundRegularPool {},
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::Unauthorized { .. }));
+    }
+
+    #[test]
+    fn test_fund_big_pool() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let info = mock_info("staking_hub", &coins(100_000_000, "inj"));
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::FundBigPool {},
+        )
+        .unwrap();
+
+        let state = DRAW_STATE.load(deps.as_ref().storage).unwrap();
+        assert_eq!(state.big_pool_balance, Uint128::from(100_000_000u128));
+    }
+
+    #[test]
+    fn test_commit_draw_no_snapshot() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let info = mock_info("staking_hub", &coins(50_000_000, "inj"));
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::FundRegularPool {},
+        )
+        .unwrap();
+
+        let secret = b"my_secret";
+        let commit: [u8; 32] = Sha256::digest(secret).into();
+
+        let info = mock_info("operator", &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::CommitDraw {
+                draw_type: DrawType::Regular,
+                operator_commit: hex::encode(commit),
+                target_drand_round: 1000,
+                reward_amount: Uint128::from(10_000_000u128),
+                epoch: 1,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::NoSnapshot));
+    }
+
+    #[test]
+    fn test_commit_draw() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        // Fund pool
+        let info = mock_info("staking_hub", &coins(50_000_000, "inj"));
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::FundRegularPool {},
+        )
+        .unwrap();
+
+        // Set snapshot
+        let info = mock_info("staking_hub", &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::SetSnapshot {
+                epoch: 1,
+                merkle_root: "abcd1234".to_string(),
+                total_weight: Uint128::from(1000u128),
+                num_holders: 3,
+            },
+        )
+        .unwrap();
+
+        // Commit draw
+        let secret = b"my_secret";
+        let commit: [u8; 32] = Sha256::digest(secret).into();
+        let commit_hex = hex::encode(commit);
+
+        let info = mock_info("operator", &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::CommitDraw {
+                draw_type: DrawType::Regular,
+                operator_commit: commit_hex.clone(),
+                target_drand_round: 1000,
+                reward_amount: Uint128::from(10_000_000u128),
+                epoch: 1,
+            },
+        )
+        .unwrap();
+
+        let draw = DRAWS.load(deps.as_ref().storage, 0).unwrap();
+        assert_eq!(draw.status, DrawStatus::Committed);
+        assert_eq!(draw.operator_commit, commit_hex);
+        assert_eq!(draw.reward_amount, Uint128::from(10_000_000u128));
+
+        let state = DRAW_STATE.load(deps.as_ref().storage).unwrap();
+        assert_eq!(state.regular_pool_balance, Uint128::from(40_000_000u128));
+        assert_eq!(state.next_draw_id, 1);
+    }
+
+    #[test]
+    fn test_commit_draw_insufficient_pool() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let info = mock_info("staking_hub", &coins(5_000_000, "inj"));
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::FundRegularPool {},
+        )
+        .unwrap();
+
+        let info = mock_info("staking_hub", &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::SetSnapshot {
+                epoch: 1,
+                merkle_root: "abcd1234".to_string(),
+                total_weight: Uint128::from(1000u128),
+                num_holders: 3,
+            },
+        )
+        .unwrap();
+
+        let secret = b"my_secret";
+        let commit: [u8; 32] = Sha256::digest(secret).into();
+
+        let info = mock_info("operator", &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::CommitDraw {
+                draw_type: DrawType::Regular,
+                operator_commit: hex::encode(commit),
+                target_drand_round: 1000,
+                reward_amount: Uint128::from(10_000_000u128),
+                epoch: 1,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::InsufficientPool { .. }));
+    }
+
+    #[test]
+    fn test_expire_draw() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let info = mock_info("staking_hub", &coins(50_000_000, "inj"));
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::FundRegularPool {},
+        )
+        .unwrap();
+
+        let info = mock_info("staking_hub", &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::SetSnapshot {
+                epoch: 1,
+                merkle_root: "abcd1234".to_string(),
+                total_weight: Uint128::from(1000u128),
+                num_holders: 3,
+            },
+        )
+        .unwrap();
+
+        let secret = b"my_secret";
+        let commit: [u8; 32] = Sha256::digest(secret).into();
+        let info = mock_info("operator", &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::CommitDraw {
+                draw_type: DrawType::Regular,
+                operator_commit: hex::encode(commit),
+                target_drand_round: 1000,
+                reward_amount: Uint128::from(10_000_000u128),
+                epoch: 1,
+            },
+        )
+        .unwrap();
+
+        // Too early
+        let info = mock_info("anyone", &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::ExpireDraw { draw_id: 0 },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::DrawNotExpired { .. }));
+
+        // Past deadline
+        let mut env = mock_env();
+        env.block.time = Timestamp::from_seconds(env.block.time.seconds() + 7200);
+
+        let info = mock_info("anyone", &[]);
+        execute(deps.as_mut(), env, info, ExecuteMsg::ExpireDraw { draw_id: 0 }).unwrap();
+
+        let draw = DRAWS.load(deps.as_ref().storage, 0).unwrap();
+        assert_eq!(draw.status, DrawStatus::Expired);
+
+        let state = DRAW_STATE.load(deps.as_ref().storage).unwrap();
+        assert_eq!(state.regular_pool_balance, Uint128::from(50_000_000u128));
+    }
+
+    #[test]
+    fn test_reveal_draw_bad_commit() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let info = mock_info("staking_hub", &coins(50_000_000, "inj"));
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::FundRegularPool {},
+        )
+        .unwrap();
+
+        let info = mock_info("staking_hub", &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::SetSnapshot {
+                epoch: 1,
+                merkle_root: "abcd1234".to_string(),
+                total_weight: Uint128::from(1000u128),
+                num_holders: 3,
+            },
+        )
+        .unwrap();
+
+        let secret = b"my_secret";
+        let commit: [u8; 32] = Sha256::digest(secret).into();
+        let info = mock_info("operator", &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::CommitDraw {
+                draw_type: DrawType::Regular,
+                operator_commit: hex::encode(commit),
+                target_drand_round: 1000,
+                reward_amount: Uint128::from(10_000_000u128),
+                epoch: 1,
+            },
+        )
+        .unwrap();
+
+        // Wrong secret
+        let info = mock_info("operator", &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::RevealDraw {
+                draw_id: 0,
+                operator_secret_hex: hex::encode(b"wrong_secret"),
+                winner_address: "inj1winner".to_string(),
+                winner_cumulative_start: Uint128::zero(),
+                winner_cumulative_end: Uint128::from(100u128),
+                merkle_proof: vec![],
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::CommitMismatch));
+    }
+
+    #[test]
+    fn test_reveal_draw_expired() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let info = mock_info("staking_hub", &coins(50_000_000, "inj"));
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::FundRegularPool {},
+        )
+        .unwrap();
+
+        let info = mock_info("staking_hub", &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::SetSnapshot {
+                epoch: 1,
+                merkle_root: "abcd1234".to_string(),
+                total_weight: Uint128::from(1000u128),
+                num_holders: 3,
+            },
+        )
+        .unwrap();
+
+        let secret = b"my_secret";
+        let commit: [u8; 32] = Sha256::digest(secret).into();
+        let info = mock_info("operator", &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::CommitDraw {
+                draw_type: DrawType::Regular,
+                operator_commit: hex::encode(commit),
+                target_drand_round: 1000,
+                reward_amount: Uint128::from(10_000_000u128),
+                epoch: 1,
+            },
+        )
+        .unwrap();
+
+        let mut env = mock_env();
+        env.block.time = Timestamp::from_seconds(env.block.time.seconds() + 7200);
+
+        let info = mock_info("operator", &[]);
+        let err = execute(
+            deps.as_mut(),
+            env,
+            info,
+            ExecuteMsg::RevealDraw {
+                draw_id: 0,
+                operator_secret_hex: hex::encode(secret),
+                winner_address: "inj1winner".to_string(),
+                winner_cumulative_start: Uint128::zero(),
+                winner_cumulative_end: Uint128::from(100u128),
+                merkle_proof: vec![],
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::DrawExpired { .. }));
+    }
+}

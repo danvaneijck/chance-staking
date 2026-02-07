@@ -1,0 +1,26 @@
+[package]
+name = "chance-reward-distributor"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+library = []
+
+[dependencies]
+cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
+cw2 = { workspace = true }
+cw-storage-plus = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+chance-staking-common = { workspace = true }
+
+[dev-dependencies]
+cosmwasm-std = { workspace = true, features = ["testing"] }
+serde_json = { workspace = true }
