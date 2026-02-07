@@ -86,7 +86,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use crate::verify::QUICKNET_PK_HEX;
+    use crate::{state::BEACONS, verify::QUICKNET_PK_HEX};
 
     fn setup_contract(deps: DepsMut) {
         let msg = InstantiateMsg {

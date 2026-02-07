@@ -128,9 +128,11 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 
 #[cfg(test)]
 mod tests {
+    use crate::state::UNSTAKE_REQUESTS;
+
     use super::*;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, Coin, CosmosMsg, StakingMsg, SubMsg};
+    use cosmwasm_std::{Api, Coin, CosmosMsg, StakingMsg, SubMsg, Timestamp, coins};
 
     fn default_instantiate_msg() -> InstantiateMsg {
         InstantiateMsg {
