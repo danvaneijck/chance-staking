@@ -55,6 +55,7 @@ pub enum ExecuteMsg {
     /// Update configuration. Admin only.
     UpdateConfig {
         operator: Option<String>,
+        staking_hub: Option<String>,
         reveal_deadline_seconds: Option<u64>,
         regular_draw_reward: Option<Uint128>,
         big_draw_reward: Option<Uint128>,

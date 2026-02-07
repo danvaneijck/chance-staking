@@ -60,6 +60,13 @@ DRAND_ORACLE_WASM="./artifacts/chance_drand_oracle.wasm"
 REWARD_DISTRIBUTOR_WASM="./artifacts/chance_reward_distributor.wasm"
 STAKING_HUB_WASM="./artifacts/chance_staking_hub.wasm"
 
+# -- Optional: reuse existing code IDs (set to skip uploading) --
+# If set, the script will skip storing that contract's wasm and use the given ID.
+# Leave empty to upload fresh.
+EXISTING_DRAND_CODE_ID=""
+EXISTING_DISTRIBUTOR_CODE_ID=""
+EXISTING_STAKING_HUB_CODE_ID=""
+
 ################################################################################
 #                                   HELPERS                                    #
 ################################################################################
@@ -128,7 +135,7 @@ instantiate_contract() {
     local amount_flag=""
     if [ -n "$amount" ]; then
         amount_flag="--amount=$amount"
-        echo "  > Sending $amount with instantiation"
+        echo "  > Sending $amount with instantiation" >&2
     fi
 
     echo "  Instantiating $label (code $code_id)..." >&2
@@ -197,11 +204,31 @@ echo "-------------------------------------------------"
 echo "  STEP 1: Storing Wasm codes"
 echo "-------------------------------------------------"
 
-DRAND_CODE_ID=$(store_code "$DRAND_ORACLE_WASM" "drand-oracle")
-DISTRIBUTOR_CODE_ID=$(store_code "$REWARD_DISTRIBUTOR_WASM" "reward-distributor")
-STAKING_HUB_CODE_ID=$(store_code "$STAKING_HUB_WASM" "staking-hub")
+if [ -n "$EXISTING_DRAND_CODE_ID" ]; then
+    DRAND_CODE_ID="$EXISTING_DRAND_CODE_ID"
+    echo "  Reusing existing drand-oracle code ID: $DRAND_CODE_ID"
+else
+    DRAND_CODE_ID=$(store_code "$DRAND_ORACLE_WASM" "drand-oracle")
+fi
 echo ""
-echo "  Stored code IDs:"
+
+if [ -n "$EXISTING_DISTRIBUTOR_CODE_ID" ]; then
+    DISTRIBUTOR_CODE_ID="$EXISTING_DISTRIBUTOR_CODE_ID"
+    echo "  Reusing existing reward-distributor code ID: $DISTRIBUTOR_CODE_ID"
+else
+    DISTRIBUTOR_CODE_ID=$(store_code "$REWARD_DISTRIBUTOR_WASM" "reward-distributor")
+fi
+echo ""
+
+if [ -n "$EXISTING_STAKING_HUB_CODE_ID" ]; then
+    STAKING_HUB_CODE_ID="$EXISTING_STAKING_HUB_CODE_ID"
+    echo "  Reusing existing staking-hub code ID: $STAKING_HUB_CODE_ID"
+else
+    STAKING_HUB_CODE_ID=$(store_code "$STAKING_HUB_WASM" "staking-hub")
+fi
+echo ""
+
+echo "  Code IDs:"
 echo "    drand-oracle:       $DRAND_CODE_ID"
 echo "    reward-distributor: $DISTRIBUTOR_CODE_ID"
 echo "    staking-hub:        $STAKING_HUB_CODE_ID"
@@ -283,8 +310,43 @@ echo ""
 echo "-------------------------------------------------"
 echo "  STEP 5: Updating reward-distributor staking_hub"
 echo "-------------------------------------------------"
-echo "  NOTE: The reward-distributor was instantiated with staking_hub=$ADMIN_ADDRESS"
-echo "  You may need to update it to the real staking-hub address: $STAKING_HUB_ADDRESS"
+
+echo "  Updating reward-distributor staking_hub to: $STAKING_HUB_ADDRESS"
+
+UPDATE_CONFIG_MSG=$(cat <<EOF
+{
+  "update_config": {
+    "staking_hub": "$STAKING_HUB_ADDRESS"
+  }
+}
+EOF
+)
+UPDATE_CONFIG_MSG=$(echo "$UPDATE_CONFIG_MSG" | tr -d '\n' | tr -s ' ')
+
+UPDATE_RESPONSE=$(yes "$PASSWORD" | injectived tx wasm execute "$REWARD_DISTRIBUTOR_ADDRESS" "$UPDATE_CONFIG_MSG" \
+    --from="$FROM" \
+    --chain-id="$CHAIN_ID" \
+    --yes --fees="$FEES" --gas="$GAS" \
+    --node="$NODE" --output text 2>&1)
+
+if ! echo "$UPDATE_RESPONSE" | grep -q "txhash"; then
+    echo "  ERROR: Failed to submit UpdateConfig transaction."
+    echo "$UPDATE_RESPONSE"
+    exit 1
+fi
+
+UPDATE_TXHASH=$(echo "$UPDATE_RESPONSE" | grep 'txhash:' | awk '{print $2}')
+echo "  > UpdateConfig tx: $UPDATE_TXHASH"
+echo "  > Waiting for indexing..."
+sleep 8
+
+# Verify the update succeeded
+VERIFY_OUTPUT=$(injectived query tx "$UPDATE_TXHASH" --node="$NODE" --output text 2>&1)
+if echo "$VERIFY_OUTPUT" | grep -q "code: 0"; then
+    echo "  reward-distributor staking_hub updated successfully."
+else
+    echo "  WARNING: UpdateConfig tx may have failed. Check tx: $UPDATE_TXHASH"
+fi
 echo ""
 
 ################################################################################

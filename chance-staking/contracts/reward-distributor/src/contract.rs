@@ -100,6 +100,7 @@ pub fn execute(
         ExecuteMsg::ExpireDraw { draw_id } => execute::expire_draw(deps, env, info, draw_id),
         ExecuteMsg::UpdateConfig {
             operator,
+            staking_hub,
             reveal_deadline_seconds,
             regular_draw_reward,
             big_draw_reward,
@@ -108,6 +109,7 @@ pub fn execute(
             env,
             info,
             operator,
+            staking_hub,
             reveal_deadline_seconds,
             regular_draw_reward,
             big_draw_reward,
