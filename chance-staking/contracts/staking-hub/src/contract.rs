@@ -1,5 +1,5 @@
 use cosmwasm_std::{
-    entry_point, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, StdResult, Timestamp, Uint128,
+    entry_point, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, StdResult, Uint128,
 };
 use cw2::set_contract_version;
 use injective_cosmwasm::InjectiveMsgWrapper;
