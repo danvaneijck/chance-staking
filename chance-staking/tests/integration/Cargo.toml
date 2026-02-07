@@ -11,8 +11,14 @@ harness = true
 
 [dependencies]
 cosmwasm-std = { workspace = true }
+cosmwasm-schema = { workspace = true }
 chance-staking-common = { workspace = true }
 serde_json = { workspace = true }
+serde = { workspace = true }
 sha2 = { workspace = true }
 hex = { workspace = true }
-injective-test-tube = { workspace = true }
+
+# Contract crates (rlib builds for direct entry-point testing)
+chance-drand-oracle = { path = "../../contracts/drand-oracle" }
+chance-staking-hub = { path = "../../contracts/staking-hub" }
+chance-reward-distributor = { path = "../../contracts/reward-distributor" }
