@@ -27,9 +27,12 @@ pub enum ExecuteMsg {
     Unstake {},
     /// Claim unlocked unstake requests.
     ClaimUnstaked { request_ids: Vec<u64> },
-    /// Advance to next epoch. Claims validator rewards and distributes.
-    /// Operator only.
-    AdvanceEpoch {},
+    /// Step 1: Withdraw staking rewards from all validators into the contract.
+    /// Operator only. Call DistributeRewards after this tx confirms.
+    ClaimRewards {},
+    /// Step 2: Distribute claimed rewards (splits to pools, yield, treasury)
+    /// and advance to next epoch. Operator only.
+    DistributeRewards {},
     /// Submit a snapshot merkle root for the current epoch. Operator only.
     TakeSnapshot {
         merkle_root: String,

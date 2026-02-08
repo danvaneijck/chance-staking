@@ -1,4 +1,4 @@
-import { queryContract, executeContract, stakingClient } from "../clients";
+import { queryContract, executeContract } from "../clients";
 import { config } from "../config";
 import { logger } from "../utils/logger";
 import { getStakingHubConfig, fetchAllCsInjHolders, buildSnapshotEntries } from "./snapshot";
@@ -19,13 +19,14 @@ export async function getEpochState(): Promise<EpochState> {
   return queryContract<EpochState>(config.contracts.stakingHub, { epoch_state: {} });
 }
 
-export async function advanceEpoch(rewardAmount: string): Promise<string> {
-  logger.info(`Advancing epoch with ${rewardAmount} inj rewards`);
-  return executeContract(
-    config.contracts.stakingHub,
-    { advance_epoch: {} },
-    rewardAmount !== "0" ? [{ denom: "inj", amount: rewardAmount }] : undefined
-  );
+export async function claimRewards(): Promise<string> {
+  logger.info("Claiming staking rewards from validators...");
+  return executeContract(config.contracts.stakingHub, { claim_rewards: {} });
+}
+
+export async function distributeRewards(): Promise<string> {
+  logger.info("Distributing rewards and advancing epoch...");
+  return executeContract(config.contracts.stakingHub, { distribute_rewards: {} });
 }
 
 export async function takeSnapshot(): Promise<string> {
@@ -91,18 +92,18 @@ export async function checkAndAdvanceEpoch(): Promise<boolean> {
 
   logger.info(`Epoch ${epochState.current_epoch} is ready to advance`);
 
-  // Step 1: Claim staking rewards from validators
-  // In a real setup, the operator would claim rewards externally and pass them in.
-  // For now, we advance with whatever rewards are available.
-  // The operator needs to claim delegation rewards separately via MsgWithdrawDelegatorReward
-  // and then send them to this contract.
+  // Step 1: Claim staking rewards from all validators
+  // This sends WithdrawDelegatorReward msgs to claim rewards into the contract
+  await claimRewards();
 
-  // TODO: Implement staking reward claiming from validators
-  // For now, advance with 0 rewards (the contract handles the case)
-  await advanceEpoch("0");
+  // Step 2: Distribute the claimed rewards and advance epoch
+  // Wait a moment for the claim tx to be processed
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+  await distributeRewards();
 
-  // Step 2: Take snapshot if not yet taken
-  if (!epochState.snapshot_finalized) {
+  // Step 3: Take snapshot if not yet taken
+  const updatedEpoch = await getEpochState();
+  if (!updatedEpoch.snapshot_finalized) {
     await takeSnapshot();
   }
 
