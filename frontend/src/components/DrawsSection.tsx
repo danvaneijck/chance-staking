@@ -31,6 +31,7 @@ export default function DrawsSection() {
 
   const [filter, setFilter] = useState<'all' | 'regular' | 'big'>('all')
 
+
   const filtered = filter === 'all'
     ? recentDraws
     : recentDraws.filter((d) => d.draw_type === filter)

@@ -87,7 +87,7 @@ pub fn update_operators(
     // Remove operators
     for addr_str in &remove {
         let addr = deps.api.addr_validate(addr_str)?;
-        config.operators.retain(|a| a != &addr);
+        config.operators.retain(|a| a != addr);
     }
 
     // Add operators

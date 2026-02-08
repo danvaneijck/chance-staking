@@ -33,8 +33,8 @@ OPERATOR_ADDRESS="inj1q2m26a7jdzjyfdn545vqsude3zwwtfrdap5jgz"
 TREASURY_ADDRESS="inj1q2m26a7jdzjyfdn545vqsude3zwwtfrdap5jgz"
 
 # -- Validators to delegate to --
-VALIDATOR_1="injvaloper1ultw9r29l8nxy5u6thcgusjn95vsy2caw722q5"
-VALIDATOR_2="injvaloper1qdcgqaae4v2zz99hq0g60yqt6qhxm4g0d5mrf7"
+VALIDATOR_1="injvaloper1h5u937etuat5hnr2s34yaaalfpkkscl587w3v6"
+VALIDATOR_2="injvaloper156t3yxd4udv0h9gwagfcmwnmm3quy0nph7tyh5"
 
 # -- Drand quicknet config --
 QUICKNET_PUBKEY_HEX="83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a"
@@ -43,12 +43,12 @@ QUICKNET_GENESIS_TIME=1692803367
 QUICKNET_PERIOD_SECONDS=3
 
 # -- Reward distributor config --
-REVEAL_DEADLINE_SECONDS=3600
-REGULAR_DRAW_REWARD="10000000"
-BIG_DRAW_REWARD="100000000"
+REVEAL_DEADLINE_SECONDS=180
+REGULAR_DRAW_REWARD="1000000"
+BIG_DRAW_REWARD="5000000"
 
 # -- Staking hub config --
-EPOCH_DURATION_SECONDS=86400
+EPOCH_DURATION_SECONDS=120
 PROTOCOL_FEE_BPS=500
 BASE_YIELD_BPS=500
 REGULAR_POOL_BPS=7000
@@ -63,9 +63,9 @@ STAKING_HUB_WASM="./artifacts/chance_staking_hub.wasm"
 # -- Optional: reuse existing code IDs (set to skip uploading) --
 # If set, the script will skip storing that contract's wasm and use the given ID.
 # Leave empty to upload fresh.
-EXISTING_DRAND_CODE_ID=""
-EXISTING_DISTRIBUTOR_CODE_ID=""
-EXISTING_STAKING_HUB_CODE_ID=""
+EXISTING_DRAND_CODE_ID="39232"
+EXISTING_DISTRIBUTOR_CODE_ID="39233"
+EXISTING_STAKING_HUB_CODE_ID="39234"
 
 ################################################################################
 #                                   HELPERS                                    #
