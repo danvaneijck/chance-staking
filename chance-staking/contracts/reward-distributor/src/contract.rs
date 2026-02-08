@@ -5,7 +5,9 @@ use cw2::set_contract_version;
 
 use crate::error::ContractError;
 use crate::execute;
-use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use crate::msg::{
+    CommitDrawParams, ExecuteMsg, InstantiateMsg, QueryMsg, RevealDrawParams, UpdateConfigParams,
+};
 use crate::query;
 use crate::state::{DistributorConfig, DrawStateInfo, CONFIG, DRAW_STATE};
 
@@ -73,11 +75,13 @@ pub fn execute(
             deps,
             env,
             info,
-            draw_type,
-            operator_commit,
-            target_drand_round,
-            reward_amount,
-            epoch,
+            CommitDrawParams {
+                draw_type,
+                operator_commit,
+                target_drand_round,
+                reward_amount,
+                epoch,
+            },
         ),
         ExecuteMsg::RevealDraw {
             draw_id,
@@ -90,12 +94,14 @@ pub fn execute(
             deps,
             env,
             info,
-            draw_id,
-            operator_secret_hex,
-            winner_address,
-            winner_cumulative_start,
-            winner_cumulative_end,
-            merkle_proof,
+            RevealDrawParams {
+                draw_id,
+                operator_secret_hex,
+                winner_address,
+                winner_cumulative_start,
+                winner_cumulative_end,
+                merkle_proof,
+            },
         ),
         ExecuteMsg::ExpireDraw { draw_id } => execute::expire_draw(deps, env, info, draw_id),
         ExecuteMsg::UpdateConfig {
@@ -108,11 +114,13 @@ pub fn execute(
             deps,
             env,
             info,
-            operator,
-            staking_hub,
-            reveal_deadline_seconds,
-            regular_draw_reward,
-            big_draw_reward,
+            UpdateConfigParams {
+                operator,
+                staking_hub,
+                reveal_deadline_seconds,
+                regular_draw_reward,
+                big_draw_reward,
+            },
         ),
     }
 }

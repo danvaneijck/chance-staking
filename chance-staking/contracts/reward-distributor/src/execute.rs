@@ -7,7 +7,7 @@ use cosmwasm_std::{
 use sha2::{Digest, Sha256};
 
 use crate::error::ContractError;
-use crate::msg::OracleQueryMsg;
+use crate::msg::{CommitDrawParams, OracleQueryMsg, RevealDrawParams, UpdateConfigParams};
 use crate::state::{
     Draw, Snapshot, CONFIG, DRAWS, DRAW_STATE, SNAPSHOTS, USER_TOTAL_WON,
     USER_WINS, USER_WIN_COUNT,
@@ -134,12 +134,16 @@ pub fn commit_draw(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    draw_type: DrawType,
-    operator_commit: String,
-    target_drand_round: u64,
-    reward_amount: Uint128,
-    epoch: u64,
+    params: CommitDrawParams,
 ) -> Result<Response, ContractError> {
+    let CommitDrawParams {
+        draw_type,
+        operator_commit,
+        target_drand_round,
+        reward_amount,
+        epoch,
+    } = params;
+
     let config = CONFIG.load(deps.storage)?;
     if info.sender != config.operator {
         return Err(ContractError::Unauthorized {
@@ -238,13 +242,17 @@ pub fn reveal_draw(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
-    draw_id: u64,
-    operator_secret_hex: String,
-    winner_address: String,
-    winner_cumulative_start: Uint128,
-    winner_cumulative_end: Uint128,
-    merkle_proof: Vec<String>,
+    params: RevealDrawParams,
 ) -> Result<Response, ContractError> {
+    let RevealDrawParams {
+        draw_id,
+        operator_secret_hex,
+        winner_address,
+        winner_cumulative_start,
+        winner_cumulative_end,
+        merkle_proof,
+    } = params;
+
     let config = CONFIG.load(deps.storage)?;
     if info.sender != config.operator {
         return Err(ContractError::Unauthorized {
@@ -464,12 +472,16 @@ pub fn update_config(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
-    operator: Option<String>,
-    staking_hub: Option<String>,
-    reveal_deadline_seconds: Option<u64>,
-    regular_draw_reward: Option<Uint128>,
-    big_draw_reward: Option<Uint128>,
+    params: UpdateConfigParams,
 ) -> Result<Response, ContractError> {
+    let UpdateConfigParams {
+        operator,
+        staking_hub,
+        reveal_deadline_seconds,
+        regular_draw_reward,
+        big_draw_reward,
+    } = params;
+
     let mut config = CONFIG.load(deps.storage)?;
 
     if info.sender != config.admin {
