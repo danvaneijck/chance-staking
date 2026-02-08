@@ -39,68 +39,28 @@ export async function fetchAllCsInjHolders(): Promise<DenomHolder[]> {
     logger.info(`Fetching all holders of ${denom}`);
 
     const holders: DenomHolder[] = [];
-    let pagination: { key?: string } = {};
-
-    // Paginate through all holders using bank module denom owners
-    // The Injective SDK may not have a direct denomOwners query,
-    // so we use supply + known holder tracking approach.
-    // For testnet, we can use the REST API as a fallback.
-    try {
-        const response = await fetchDenomHoldersFromRest(denom);
-        return response;
-    } catch (err) {
-        logger.warn("Failed to fetch holders from REST, trying gRPC approach");
-        throw err;
-    }
-}
-
-async function fetchDenomHoldersFromRest(
-    denom: string,
-): Promise<DenomHolder[]> {
-    // Use Injective LCD/REST endpoint to get token factory denom holders
-    const baseUrl =
-        config.network === "mainnet"
-            ? "https://sentry.lcd.injective.network"
-            : "https://testnet.sentry.lcd.injective.network";
-
-    const holders: DenomHolder[] = [];
-    let nextKey: string | null = null;
+    let nextKey: string | null = "";
 
     do {
-        const params = new URLSearchParams({
-            "pagination.limit": "100",
+        const response = await bankClient.fetchDenomOwners(denom, {
+            key: nextKey,
         });
-        if (nextKey) {
-            params.set("pagination.key", nextKey);
-        }
 
-        const url = `${baseUrl}/cosmos/bank/v1beta1/denom_owners/${encodeURIComponent(denom)}?${params}`;
-        const response = await fetch(url);
-        console.log(response);
-        if (!response.ok) {
-            throw new Error(
-                `Failed to fetch denom owners: ${response.statusText}`,
-            );
-        }
-
-        const data = (await response.json()) as {
-            denom_owners: Array<{
-                address: string;
-                balance: { denom: string; amount: string };
-            }>;
-            pagination: { next_key: string | null };
-        };
-
-        for (const owner of data.denom_owners) {
-            if (BigInt(owner.balance.amount) > BigInt(0)) {
-                holders.push({
-                    address: owner.address,
-                    balance: owner.balance.amount,
-                });
+        if (response && response.denomOwners) {
+            for (const owner of response.denomOwners) {
+                if (owner.balance && BigInt(owner.balance.amount) > BigInt(0)) {
+                    holders.push({
+                        address: owner.address,
+                        balance: owner.balance.amount,
+                    });
+                }
             }
+        } else {
+            logger.warn("No denom owners found in response");
+            break;
         }
 
-        nextKey = data.pagination.next_key;
+        nextKey = response.pagination.next;
     } while (nextKey);
 
     logger.info(`Found ${holders.length} csINJ holders`);
