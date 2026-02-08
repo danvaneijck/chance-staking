@@ -1,12 +1,7 @@
 import React, { useState } from 'react'
-import { Trophy, Clock, ChevronRight, Gift, Users, Coins } from 'lucide-react'
+import { Trophy, Clock, ChevronRight, Gift, Users, Coins, Radio } from 'lucide-react'
 import { useStore } from '../store/useStore'
-import { INJ_DECIMALS } from '../config'
-
-function formatInj(raw: string): string {
-  const n = parseFloat(raw) / 10 ** INJ_DECIMALS
-  return n.toFixed(2)
-}
+import { formatInj } from '../utils/formatNumber'
 
 function truncateAddr(addr: string): string {
   if (!addr) return ''
@@ -28,16 +23,24 @@ export default function DrawsSection() {
   const recentDraws = useStore((s) => s.recentDraws)
   const regularPoolBalance = useStore((s) => s.regularPoolBalance)
   const bigPoolBalance = useStore((s) => s.bigPoolBalance)
+  const selectDraw = useStore((s) => s.selectDraw)
 
   const [filter, setFilter] = useState<'all' | 'regular' | 'big'>('all')
-
 
   const filtered = filter === 'all'
     ? recentDraws
     : recentDraws.filter((d) => d.draw_type === filter)
 
-  // Only show revealed draws (with winners)
-  const revealedDraws = filtered.filter((d) => d.status === 'revealed')
+  // Sort by time descending (newest first)
+  const sorted = [...filtered].sort((a, b) => {
+    const timeA = parseInt(a.revealed_at || a.created_at)
+    const timeB = parseInt(b.revealed_at || b.created_at)
+    return timeB - timeA
+  })
+
+  // Split into committed (live) and revealed draws
+  const committedDraws = sorted.filter((d) => d.status === 'committed')
+  const revealedDraws = sorted.filter((d) => d.status === 'revealed')
 
   return (
     <section id="draws" style={styles.section}>
@@ -49,7 +52,8 @@ export default function DrawsSection() {
           </div>
           <h2 style={styles.sectionTitle}>Recent Winners</h2>
           <p style={styles.sectionSubtitle}>
-            Every draw is verifiable on-chain using drand beacons and Merkle proofs
+            Every draw is verifiable on-chain using drand beacons and Merkle proofs.
+            Click any draw to verify.
           </p>
         </div>
 
@@ -122,9 +126,64 @@ export default function DrawsSection() {
           ))}
         </div>
 
-        {/* Draws list */}
+        {/* Committed (live) draws */}
+        {committedDraws.length > 0 && (
+          <div style={styles.liveSection}>
+            <div style={styles.liveSectionHeader}>
+              <div style={styles.liveIndicator}>
+                <div style={styles.livePulse} />
+                <div style={styles.livePulseRing} />
+              </div>
+              <span style={styles.liveSectionTitle}>
+                Awaiting Reveal ({committedDraws.length})
+              </span>
+            </div>
+            <div style={styles.drawsList}>
+              {committedDraws.map((draw, i) => (
+                <div
+                  key={draw.id}
+                  style={{
+                    ...styles.drawRow,
+                    ...styles.drawRowCommitted,
+                    animationDelay: `${i * 0.05}s`,
+                  }}
+                  onClick={() => selectDraw(draw.id)}
+                >
+                  <div style={styles.drawLeft}>
+                    <div style={{
+                      ...styles.drawTypeBadge,
+                      background: draw.draw_type === 'big'
+                        ? 'rgba(244, 114, 182, 0.12)'
+                        : 'rgba(158, 127, 255, 0.12)',
+                      color: draw.draw_type === 'big' ? '#f472b6' : '#9E7FFF',
+                    }}>
+                      <Radio size={12} style={{ animation: 'pulse 2s ease-in-out infinite' }} />
+                      #{draw.id}
+                    </div>
+                    <div style={styles.drawInfo}>
+                      <div style={styles.drawWinner}>
+                        Pending reveal...
+                      </div>
+                      <div style={styles.drawMeta}>
+                        Epoch {draw.epoch} · drand #{draw.target_drand_round} · {timeAgo(draw.created_at)}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={styles.drawRight}>
+                    <div style={{ ...styles.drawReward, color: '#f59e0b' }}>
+                      {formatInj(draw.reward_amount)} INJ
+                    </div>
+                    <ChevronRight size={16} color="#A3A3A3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Revealed draws list */}
         <div style={styles.drawsList}>
-          {revealedDraws.length === 0 && (
+          {revealedDraws.length === 0 && committedDraws.length === 0 && (
             <div style={styles.emptyState}>
               No draws yet. Draws appear here once the first epoch completes.
             </div>
@@ -136,6 +195,7 @@ export default function DrawsSection() {
                 ...styles.drawRow,
                 animationDelay: `${i * 0.05}s`,
               }}
+              onClick={() => selectDraw(draw.id)}
             >
               <div style={styles.drawLeft}>
                 <div style={{
@@ -152,7 +212,7 @@ export default function DrawsSection() {
                     {truncateAddr(draw.winner || '')}
                   </div>
                   <div style={styles.drawMeta}>
-                    Epoch {draw.epoch} · drand #{draw.target_drand_round} · {timeAgo(draw.created_at)}
+                    Epoch {draw.epoch} · drand #{draw.target_drand_round} · {timeAgo(draw.revealed_at || draw.created_at)}
                   </div>
                 </div>
               </div>
@@ -297,6 +357,41 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#9E7FFF',
     border: '1px solid rgba(158, 127, 255, 0.2)',
   },
+  liveSection: {
+    marginBottom: 16,
+  },
+  liveSectionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 12,
+  },
+  liveIndicator: {
+    position: 'relative' as const,
+    width: 10,
+    height: 10,
+  },
+  livePulse: {
+    position: 'absolute' as const,
+    inset: 0,
+    borderRadius: '50%',
+    background: '#f59e0b',
+  },
+  livePulseRing: {
+    position: 'absolute' as const,
+    inset: -4,
+    borderRadius: '50%',
+    border: '2px solid #f59e0b',
+    opacity: 0.4,
+    animation: 'pulse 2s ease-in-out infinite',
+  },
+  liveSectionTitle: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#f59e0b',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+  },
   drawsList: {
     display: 'flex',
     flexDirection: 'column' as const,
@@ -320,12 +415,19 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     animation: 'fadeInUp 0.4s ease-out both',
   },
+  drawRowCommitted: {
+    border: '1px solid rgba(245, 158, 11, 0.15)',
+    background: 'linear-gradient(135deg, rgba(38, 38, 38, 1), rgba(245, 158, 11, 0.03))',
+  },
   drawLeft: {
     display: 'flex',
     alignItems: 'center',
     gap: 16,
   },
   drawTypeBadge: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
     padding: '6px 12px',
     borderRadius: 8,
     fontSize: 12,

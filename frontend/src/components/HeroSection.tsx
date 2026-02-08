@@ -1,14 +1,9 @@
 import React from 'react'
 import { Sparkles, Zap } from 'lucide-react'
 import { useStore } from '../store/useStore'
-import { INJ_DECIMALS } from '../config'
-
-function formatInj(raw: string): string {
-  const n = parseFloat(raw) / 10 ** INJ_DECIMALS
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return n.toFixed(1)
-}
+import { formatInj } from '../utils/formatNumber'
+import EpochCountdown from './EpochCountdown'
+import ActivityTicker from './ActivityTicker'
 
 export default function HeroSection() {
   const exchangeRate = useStore((s) => s.exchangeRate)
@@ -53,6 +48,11 @@ export default function HeroSection() {
           </a>
         </div>
 
+        {/* Epoch Countdown */}
+        <div style={styles.countdownRow}>
+          <EpochCountdown />
+        </div>
+
         <div style={styles.statsRow}>
           <div style={styles.statCard}>
             <div style={styles.statValue}>{formatInj(totalStaked)} INJ</div>
@@ -74,6 +74,9 @@ export default function HeroSection() {
             <div style={styles.statLabel}>csINJ Rate</div>
           </div>
         </div>
+
+        {/* Activity Ticker */}
+        <ActivityTicker />
       </div>
     </section>
   )
@@ -180,7 +183,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     gap: 16,
     justifyContent: 'center',
-    marginBottom: 64,
+    marginBottom: 32,
     flexWrap: 'wrap' as const,
   },
   primaryCta: {
@@ -208,6 +211,10 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #2F2F2F',
     cursor: 'pointer',
     transition: 'all 0.3s ease',
+  },
+  countdownRow: {
+    maxWidth: 360,
+    margin: '0 auto 32px',
   },
   statsRow: {
     display: 'flex',

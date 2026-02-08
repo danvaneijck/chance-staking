@@ -1,12 +1,7 @@
 import React, { useState } from 'react'
-import { Clock, Trophy, Download, Loader } from 'lucide-react'
+import { Clock, Trophy, Download, Loader, Target } from 'lucide-react'
 import { useStore } from '../store/useStore'
-import { INJ_DECIMALS } from '../config'
-
-function formatInj(raw: string): string {
-  const n = parseFloat(raw) / 10 ** INJ_DECIMALS
-  return n.toFixed(4)
-}
+import { formatInj } from '../utils/formatNumber'
 
 function formatTimestamp(nanos: string): string {
   const ms = parseInt(nanos) / 1e6
@@ -27,6 +22,8 @@ export default function PortfolioSection() {
   const isLoading = useStore((s) => s.isLoading)
   const injBalance = useStore((s) => s.injBalance)
   const csinjBalance = useStore((s) => s.csinjBalance)
+  const snapshotTotalWeight = useStore((s) => s.snapshotTotalWeight)
+  const snapshotNumHolders = useStore((s) => s.snapshotNumHolders)
 
   const [tab, setTab] = useState<'overview' | 'unstaking' | 'wins'>('overview')
   const [claiming, setClaiming] = useState<number | null>(null)
@@ -76,28 +73,85 @@ export default function PortfolioSection() {
 
         {/* Overview tab */}
         {tab === 'overview' && (
-          <div style={styles.overviewGrid}>
-            <div style={styles.balanceCard}>
-              <div style={styles.balanceLabel}>INJ Balance</div>
-              <div style={styles.balanceValue}>{formatInj(injBalance)} INJ</div>
-            </div>
-            <div style={styles.balanceCard}>
-              <div style={styles.balanceLabel}>csINJ Balance</div>
-              <div style={styles.balanceValue}>{formatInj(csinjBalance)} csINJ</div>
-            </div>
-            <div style={styles.balanceCard}>
-              <div style={styles.balanceLabel}>Total Wins</div>
-              <div style={{ ...styles.balanceValue, color: '#10b981' }}>
-                {userWins?.total_wins ?? 0}
+          <>
+            <div style={styles.overviewGrid}>
+              <div style={styles.balanceCard}>
+                <div style={styles.balanceLabel}>INJ Balance</div>
+                <div style={styles.balanceValue}>{formatInj(injBalance)} INJ</div>
+              </div>
+              <div style={styles.balanceCard}>
+                <div style={styles.balanceLabel}>csINJ Balance</div>
+                <div style={styles.balanceValue}>{formatInj(csinjBalance)} csINJ</div>
+              </div>
+              <div style={styles.balanceCard}>
+                <div style={styles.balanceLabel}>Total Wins</div>
+                <div style={{ ...styles.balanceValue, color: '#10b981' }}>
+                  {userWins?.total_wins ?? 0}
+                </div>
+              </div>
+              <div style={styles.balanceCard}>
+                <div style={styles.balanceLabel}>Total Won</div>
+                <div style={{ ...styles.balanceValue, color: '#f59e0b' }}>
+                  {formatInj(userWins?.total_won_amount ?? '0')} INJ
+                </div>
               </div>
             </div>
-            <div style={styles.balanceCard}>
-              <div style={styles.balanceLabel}>Total Won</div>
-              <div style={{ ...styles.balanceValue, color: '#f59e0b' }}>
-                {formatInj(userWins?.total_won_amount ?? '0')} INJ
+
+            {/* Your Odds Card */}
+            {parseFloat(csinjBalance) > 0 && (
+              <div style={styles.oddsCard}>
+                <div style={styles.oddsHeader}>
+                  <div style={styles.oddsIconWrap}>
+                    <Target size={18} color="#9E7FFF" />
+                  </div>
+                  <div>
+                    <div style={styles.oddsTitle}>Your Draw Odds</div>
+                    <div style={styles.oddsSubtitle}>
+                      Based on current snapshot ({snapshotNumHolders} holders)
+                    </div>
+                  </div>
+                </div>
+                <div style={styles.oddsBody}>
+                  <div style={styles.oddsMain}>
+                    <div style={styles.oddsPercent}>
+                      {parseFloat(snapshotTotalWeight) > 0
+                        ? ((parseFloat(csinjBalance) / parseFloat(snapshotTotalWeight)) * 100).toFixed(4)
+                        : '0.0000'}%
+                    </div>
+                    <div style={styles.oddsLabel}>Regular Draw</div>
+                    <div style={styles.oddsDetail}>
+                      Weighted by csINJ balance
+                    </div>
+                  </div>
+                  <div style={styles.oddsDivider} />
+                  <div style={styles.oddsMain}>
+                    <div style={styles.oddsPercent}>
+                      {snapshotNumHolders > 0
+                        ? (100 / snapshotNumHolders).toFixed(4)
+                        : '0.0000'}%
+                    </div>
+                    <div style={styles.oddsLabel}>Big Jackpot</div>
+                    <div style={styles.oddsDetail}>
+                      Equal odds per holder
+                    </div>
+                  </div>
+                </div>
+                <div style={styles.oddsBarContainer}>
+                  <div style={styles.oddsBarTrack}>
+                    <div style={{
+                      ...styles.oddsBarFill,
+                      width: `${parseFloat(snapshotTotalWeight) > 0
+                        ? Math.min(100, (parseFloat(csinjBalance) / parseFloat(snapshotTotalWeight)) * 100)
+                        : 0}%`,
+                    }} />
+                  </div>
+                  <div style={styles.oddsBarLabel}>
+                    Your share of snapshot weight
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            )}
+          </>
         )}
 
         {/* Unstaking tab */}
@@ -389,5 +443,94 @@ const styles: Record<string, React.CSSProperties> = {
   winAmount: {
     fontSize: 16,
     fontWeight: 700,
+  },
+  oddsCard: {
+    marginTop: 16,
+    background: 'linear-gradient(135deg, rgba(38, 38, 38, 1), rgba(158, 127, 255, 0.04))',
+    border: '1px solid rgba(158, 127, 255, 0.15)',
+    borderRadius: 20,
+    padding: 24,
+  },
+  oddsHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 20,
+  },
+  oddsIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    background: 'rgba(158, 127, 255, 0.12)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  oddsTitle: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: '#FFFFFF',
+  },
+  oddsSubtitle: {
+    fontSize: 12,
+    color: '#A3A3A3',
+    marginTop: 2,
+  },
+  oddsBody: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 0,
+    marginBottom: 20,
+  },
+  oddsMain: {
+    flex: 1,
+    textAlign: 'center' as const,
+  },
+  oddsDivider: {
+    width: 1,
+    height: 56,
+    background: '#2F2F2F',
+    flexShrink: 0,
+  },
+  oddsPercent: {
+    fontSize: 28,
+    fontWeight: 800,
+    color: '#9E7FFF',
+    letterSpacing: '-0.02em',
+    lineHeight: 1.2,
+  },
+  oddsLabel: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#FFFFFF',
+    marginTop: 4,
+  },
+  oddsDetail: {
+    fontSize: 11,
+    color: '#A3A3A3',
+    marginTop: 2,
+  },
+  oddsBarContainer: {
+    marginTop: 4,
+  },
+  oddsBarTrack: {
+    height: 4,
+    borderRadius: 2,
+    background: '#1a1a1a',
+    overflow: 'hidden',
+  },
+  oddsBarFill: {
+    height: '100%',
+    borderRadius: 2,
+    background: 'linear-gradient(90deg, #9E7FFF, #38bdf8)',
+    transition: 'width 0.5s ease',
+    minWidth: 2,
+  },
+  oddsBarLabel: {
+    fontSize: 11,
+    color: '#525252',
+    marginTop: 6,
+    textAlign: 'center' as const,
   },
 }

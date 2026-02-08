@@ -30,11 +30,34 @@ interface ContractState {
     totalInjBacking: string;
     totalCsinjSupply: string;
     currentEpoch: number;
+    epochStartTime: string;
+    epochDurationSeconds: number;
     totalStaked: string;
     regularPoolBalance: string;
     bigPoolBalance: string;
     totalDrawsCompleted: number;
     totalRewardsDistributed: string;
+    snapshotTotalWeight: string;
+    snapshotNumHolders: number;
+}
+
+interface ConfettiState {
+    showConfetti: boolean;
+}
+
+export interface Toast {
+    id: number;
+    type: 'success' | 'info' | 'warning';
+    title: string;
+    message: string;
+}
+
+interface ToastState {
+    toasts: Toast[];
+}
+
+interface NavigationState {
+    selectedDrawId: number | null;
 }
 
 interface UserState {
@@ -48,9 +71,9 @@ interface DrawsState {
 }
 
 interface AppState
-    extends WalletState, BalanceState, ContractState, UserState, DrawsState {
+    extends WalletState, BalanceState, ContractState, UserState, DrawsState, ToastState, NavigationState, ConfettiState {
     isLoading: boolean;
-    error: string | null;
+    error: string;
 
     // Wallet actions
     connect: (type: WalletType) => Promise<void>;
@@ -61,6 +84,13 @@ interface AppState
     fetchUserData: () => Promise<void>;
     fetchBalances: () => Promise<void>;
     fetchDraws: () => Promise<void>;
+
+    // Toast actions
+    addToast: (toast: Omit<Toast, 'id'>) => void;
+    removeToast: (id: number) => void;
+
+    // Navigation actions
+    selectDraw: (drawId: number | null) => void;
 
     // Tx actions
     stake: (amount: string) => Promise<void>;
@@ -110,11 +140,18 @@ export const useStore = create<AppState>()(
             totalInjBacking: "0",
             totalCsinjSupply: "0",
             currentEpoch: 0,
+            epochStartTime: "0",
+            epochDurationSeconds: 86400,
             totalStaked: "0",
             regularPoolBalance: "0",
             bigPoolBalance: "0",
             totalDrawsCompleted: 0,
             totalRewardsDistributed: "0",
+            snapshotTotalWeight: "0",
+            snapshotNumHolders: 0,
+
+            // Confetti state
+            showConfetti: false,
 
             // Initial user state
             unstakeRequests: [],
@@ -124,12 +161,47 @@ export const useStore = create<AppState>()(
             // Initial draws state
             recentDraws: [],
 
+            // Toast state
+            toasts: [],
+
+            // Navigation state
+            selectedDrawId: null,
+
             isLoading: false,
-            error: null,
+            error: "",
+
+            // ──── Toast actions ────
+            addToast: (toast) => {
+                const id = Date.now();
+                set((state) => ({
+                    toasts: [...state.toasts, { ...toast, id }],
+                }));
+                setTimeout(() => {
+                    set((state) => ({
+                        toasts: state.toasts.filter((t) => t.id !== id),
+                    }));
+                }, 5000);
+            },
+
+            removeToast: (id) => {
+                set((state) => ({
+                    toasts: state.toasts.filter((t) => t.id !== id),
+                }));
+            },
+
+            // ──── Navigation actions ────
+            selectDraw: (drawId) => {
+                set({ selectedDrawId: drawId });
+                if (drawId !== null) {
+                    window.location.hash = `draw/${drawId}`;
+                } else {
+                    history.replaceState(null, "", window.location.pathname);
+                }
+            },
 
             // ──── Wallet actions ────
             connect: async (type: WalletType) => {
-                set({ isConnecting: true, error: null });
+                set({ isConnecting: true, error: "" });
                 try {
                     walletStrategy.setWallet(WALLET_MAP[type]);
                     const addresses = await walletStrategy.getAddresses();
@@ -174,7 +246,7 @@ export const useStore = create<AppState>()(
                     unstakeRequests: [],
                     userWins: null,
                     userWinDraws: [],
-                    error: null,
+                    error: "",
                 });
             },
 
@@ -183,10 +255,13 @@ export const useStore = create<AppState>()(
                 if (!CONTRACTS.stakingHub || !CONTRACTS.rewardDistributor)
                     return;
                 try {
-                    const [exchangeRateData, drawState] = await Promise.all([
-                        contracts.fetchExchangeRate(),
-                        contracts.fetchDrawState(),
-                    ]);
+                    const [exchangeRateData, drawState, epochState, hubConfig] =
+                        await Promise.all([
+                            contracts.fetchExchangeRate(),
+                            contracts.fetchDrawState(),
+                            contracts.fetchEpochState(),
+                            contracts.fetchStakingHubConfig(),
+                        ]);
                     set({
                         exchangeRate: exchangeRateData.rate,
                         totalInjBacking: exchangeRateData.total_inj_backing,
@@ -196,6 +271,14 @@ export const useStore = create<AppState>()(
                         totalDrawsCompleted: drawState.total_draws_completed,
                         totalRewardsDistributed:
                             drawState.total_rewards_distributed,
+                        currentEpoch: epochState.current_epoch,
+                        epochStartTime: epochState.epoch_start_time,
+                        epochDurationSeconds:
+                            hubConfig.epoch_duration_seconds,
+                        snapshotTotalWeight:
+                            epochState.snapshot_total_weight || "0",
+                        snapshotNumHolders:
+                            epochState.snapshot_num_holders || 0,
                     });
                 } catch (err: any) {
                     console.error("Failed to fetch contract data:", err);
@@ -248,12 +331,58 @@ export const useStore = create<AppState>()(
                 try {
                     const drawState = await contracts.fetchDrawState();
                     const count = 20;
-                    const startAfter = Math.max(0, drawState.next_draw_id - count - 1);
+                    const startAfter = Math.max(
+                        0,
+                        drawState.next_draw_id - count - 1,
+                    );
                     const { draws } = await contracts.fetchDrawHistory(
                         startAfter > 0 ? startAfter : undefined,
                         count,
                     );
                     if (draws) {
+                        const prevDraws = get().recentDraws;
+                        const prevRevealedIds = new Set(
+                            prevDraws
+                                .filter((d) => d.status === "revealed")
+                                .map((d) => d.id),
+                        );
+                        // Detect newly revealed draws (only after initial load)
+                        if (prevDraws.length > 0) {
+                            const connectedAddr =
+                                get().injectiveAddress;
+                            for (const draw of draws) {
+                                if (
+                                    draw.status === "revealed" &&
+                                    !prevRevealedIds.has(draw.id)
+                                ) {
+                                    const typeLabel =
+                                        draw.draw_type === "big"
+                                            ? "Big Jackpot"
+                                            : "Regular Draw";
+                                    const rewardInj =
+                                        parseFloat(draw.reward_amount) /
+                                        1e18;
+                                    // Check if the connected user won
+                                    const userWon =
+                                        connectedAddr &&
+                                        draw.winner === connectedAddr;
+                                    if (userWon) {
+                                        set({ showConfetti: true });
+                                        get().addToast({
+                                            type: "success",
+                                            title: `You won ${typeLabel} #${draw.id}!`,
+                                            message: `Congratulations! You won ${rewardInj.toFixed(2)} INJ!`,
+                                        });
+                                    } else {
+                                        get().addToast({
+                                            type: "success",
+                                            title: `${typeLabel} #${draw.id} Revealed!`,
+                                            message: `Winner: ${draw.winner?.slice(0, 10)}... won ${rewardInj.toFixed(2)} INJ`,
+                                        });
+                                    }
+                                }
+                            }
+                        }
                         set({ recentDraws: draws });
                     }
                 } catch (err: any) {
@@ -265,7 +394,7 @@ export const useStore = create<AppState>()(
             stake: async (amount: string) => {
                 const { injectiveAddress } = get();
                 if (!injectiveAddress) throw new Error("Wallet not connected");
-                set({ isLoading: true, error: null });
+                set({ isLoading: true, error: "" });
                 try {
                     const msg = contracts.buildStakeMsg(
                         injectiveAddress,
@@ -291,7 +420,7 @@ export const useStore = create<AppState>()(
             unstake: async (amount: string) => {
                 const { injectiveAddress } = get();
                 if (!injectiveAddress) throw new Error("Wallet not connected");
-                set({ isLoading: true, error: null });
+                set({ isLoading: true, error: "" });
                 try {
                     const msg = contracts.buildUnstakeMsg(
                         injectiveAddress,
@@ -317,7 +446,7 @@ export const useStore = create<AppState>()(
             claimUnstaked: async (requestIds: number[]) => {
                 const { injectiveAddress } = get();
                 if (!injectiveAddress) throw new Error("Wallet not connected");
-                set({ isLoading: true, error: null });
+                set({ isLoading: true, error: "" });
                 try {
                     const msg = contracts.buildClaimUnstakedMsg(
                         injectiveAddress,
