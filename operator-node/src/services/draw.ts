@@ -15,6 +15,8 @@ interface DrawStateInfo {
   big_pool_balance: string;
   total_draws_completed: number;
   total_rewards_distributed: string;
+  last_regular_draw_epoch: number | null;
+  last_big_draw_epoch: number | null;
 }
 
 interface DistributorConfig {
@@ -23,8 +25,8 @@ interface DistributorConfig {
   staking_hub: string;
   drand_oracle: string;
   reveal_deadline_seconds: number;
-  regular_draw_reward: string;
-  big_draw_reward: string;
+  epochs_between_regular: number;
+  epochs_between_big: number;
 }
 
 interface Draw {
@@ -130,23 +132,6 @@ export async function commitDraw(
   drawType: "regular" | "big",
   epoch: number
 ): Promise<{ drawId: number; targetRound: number }> {
-  const distributorConfig = await getDistributorConfig();
-  const rewardAmount =
-    drawType === "regular"
-      ? distributorConfig.regular_draw_reward
-      : distributorConfig.big_draw_reward;
-
-  // Check pool has enough funds
-  const pools = await getPoolBalances();
-  const poolBalance =
-    drawType === "regular" ? BigInt(pools.regular_pool) : BigInt(pools.big_pool);
-  if (poolBalance < BigInt(rewardAmount)) {
-    logger.warn(
-      `${drawType} pool has insufficient funds: ${poolBalance} < ${rewardAmount}`
-    );
-    throw new Error(`Insufficient ${drawType} pool funds`);
-  }
-
   // Generate operator secret and commitment
   const secret = generateSecret();
   const commit = computeOperatorCommit(secret);
@@ -162,12 +147,12 @@ export async function commitDraw(
     `Committing ${drawType} draw (id=${nextDrawId}) for epoch ${epoch}, target drand round ${targetRound}`
   );
 
+  // Contract uses full pool balance as reward and enforces epoch spacing
   await executeContract(config.contracts.rewardDistributor, {
     commit_draw: {
       draw_type: drawType,
       operator_commit: commit,
       target_drand_round: targetRound,
-      reward_amount: rewardAmount,
       epoch,
     },
   });
@@ -320,41 +305,33 @@ export async function checkAndCommitDraws(): Promise<void> {
     return;
   }
 
-  const pools = await getPoolBalances();
+  const drawState = await getDrawState();
   const distributorConfig = await getDistributorConfig();
+  const currentEpoch = epochState.current_epoch;
 
-  // Check existing draws for this epoch (committed or revealed)
-  const draws = await getRecentDraws(20);
-  const hasRegularThisEpoch = draws.some(
-    (d) =>
-      d.draw_type === "regular" &&
-      d.epoch === epochState.current_epoch &&
-      (d.status === "committed" || d.status === "revealed")
-  );
-  const hasBigThisEpoch = draws.some(
-    (d) =>
-      d.draw_type === "big" &&
-      d.epoch === epochState.current_epoch &&
-      (d.status === "committed" || d.status === "revealed")
-  );
+  // Check regular draw: pool has funds and enough epochs have passed
+  const regularReady =
+    BigInt(drawState.regular_pool_balance) > 0n &&
+    (drawState.last_regular_draw_epoch === null ||
+      currentEpoch >= drawState.last_regular_draw_epoch + distributorConfig.epochs_between_regular);
 
-  // Check if we should commit a regular draw
-  const regularPool = BigInt(pools.regular_pool);
-  const regularReward = BigInt(distributorConfig.regular_draw_reward);
-  if (regularPool >= regularReward && !hasRegularThisEpoch) {
+  if (regularReady) {
     try {
-      await commitDraw("regular", epochState.current_epoch);
+      await commitDraw("regular", currentEpoch);
     } catch (err) {
       logger.error("Failed to commit regular draw:", err);
     }
   }
 
-  // Check if we should commit a big draw
-  const bigPool = BigInt(pools.big_pool);
-  const bigReward = BigInt(distributorConfig.big_draw_reward);
-  if (bigPool >= bigReward && !hasBigThisEpoch) {
+  // Check big draw: pool has funds and enough epochs have passed
+  const bigReady =
+    BigInt(drawState.big_pool_balance) > 0n &&
+    (drawState.last_big_draw_epoch === null ||
+      currentEpoch >= drawState.last_big_draw_epoch + distributorConfig.epochs_between_big);
+
+  if (bigReady) {
     try {
-      await commitDraw("big", epochState.current_epoch);
+      await commitDraw("big", currentEpoch);
     } catch (err) {
       logger.error("Failed to commit big draw:", err);
     }
