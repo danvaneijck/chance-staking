@@ -43,14 +43,16 @@ function smallNumberWithZeroCount(
         return <span>{value.toLocaleString()}</span>;
     }
 
-    const fixed = value.toFixed(10).replace(/0+$/, "").replace(/\.$/, "");
+    const abs = Math.abs(value);
+    const zeroRun = Math.floor(-Math.log10(abs)) - 1;
+    const precision = zeroRun + 1 + digits + 2; // enough room for significant digits
+    const fixed = abs.toFixed(precision).replace(/0+$/, "").replace(/\.$/, "");
     const [, frac = ""] = fixed.split(".");
-    const zeroRun = frac.match(/^0*/)?.[0].length ?? 0;
-    const sig = frac.slice(zeroRun);
+    const sig = frac.slice(zeroRun + 1); // skip the leading zeros (already shown via subscript)
 
     return (
         <span className="inline-flex items-baseline">
-            0.0
+            {value < 0 && "-"}0.0
             {zeroRun > 0 && (
                 <sub className="text-xs" style={{ lineHeight: 1 }}>
                     {zeroRun}
