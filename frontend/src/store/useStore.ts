@@ -37,6 +37,12 @@ interface ContractState {
     bigPoolBalance: string;
     totalDrawsCompleted: number;
     totalRewardsDistributed: string;
+    snapshotTotalWeight: string;
+    snapshotNumHolders: number;
+}
+
+interface ConfettiState {
+    showConfetti: boolean;
 }
 
 export interface Toast {
@@ -65,7 +71,7 @@ interface DrawsState {
 }
 
 interface AppState
-    extends WalletState, BalanceState, ContractState, UserState, DrawsState, ToastState, NavigationState {
+    extends WalletState, BalanceState, ContractState, UserState, DrawsState, ToastState, NavigationState, ConfettiState {
     isLoading: boolean;
     error: string;
 
@@ -141,6 +147,11 @@ export const useStore = create<AppState>()(
             bigPoolBalance: "0",
             totalDrawsCompleted: 0,
             totalRewardsDistributed: "0",
+            snapshotTotalWeight: "0",
+            snapshotNumHolders: 0,
+
+            // Confetti state
+            showConfetti: false,
 
             // Initial user state
             unstakeRequests: [],
@@ -264,6 +275,10 @@ export const useStore = create<AppState>()(
                         epochStartTime: epochState.epoch_start_time,
                         epochDurationSeconds:
                             hubConfig.epoch_duration_seconds,
+                        snapshotTotalWeight:
+                            epochState.snapshot_total_weight || "0",
+                        snapshotNumHolders:
+                            epochState.snapshot_num_holders || 0,
                     });
                 } catch (err: any) {
                     console.error("Failed to fetch contract data:", err);
@@ -333,6 +348,8 @@ export const useStore = create<AppState>()(
                         );
                         // Detect newly revealed draws (only after initial load)
                         if (prevDraws.length > 0) {
+                            const connectedAddr =
+                                get().injectiveAddress;
                             for (const draw of draws) {
                                 if (
                                     draw.status === "revealed" &&
@@ -345,11 +362,24 @@ export const useStore = create<AppState>()(
                                     const rewardInj =
                                         parseFloat(draw.reward_amount) /
                                         1e18;
-                                    get().addToast({
-                                        type: "success",
-                                        title: `${typeLabel} #${draw.id} Revealed!`,
-                                        message: `Winner: ${draw.winner?.slice(0, 10)}... won ${rewardInj.toFixed(2)} INJ`,
-                                    });
+                                    // Check if the connected user won
+                                    const userWon =
+                                        connectedAddr &&
+                                        draw.winner === connectedAddr;
+                                    if (userWon) {
+                                        set({ showConfetti: true });
+                                        get().addToast({
+                                            type: "success",
+                                            title: `You won ${typeLabel} #${draw.id}!`,
+                                            message: `Congratulations! You won ${rewardInj.toFixed(2)} INJ!`,
+                                        });
+                                    } else {
+                                        get().addToast({
+                                            type: "success",
+                                            title: `${typeLabel} #${draw.id} Revealed!`,
+                                            message: `Winner: ${draw.winner?.slice(0, 10)}... won ${rewardInj.toFixed(2)} INJ`,
+                                        });
+                                    }
                                 }
                             }
                         }

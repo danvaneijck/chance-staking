@@ -9,6 +9,7 @@ import DrawDetail from './components/DrawDetail'
 import HowItWorks from './components/HowItWorks'
 import Footer from './components/Footer'
 import ToastContainer from './components/Toast'
+import Confetti from './components/Confetti'
 
 function App() {
   const isConnected = useStore((s) => s.isConnected)
@@ -77,6 +78,7 @@ function App() {
     <div style={{ minHeight: '100vh' }}>
       <Header />
       <ToastContainer />
+      <Confetti />
 
       {selectedDrawId !== null ? (
         <main>

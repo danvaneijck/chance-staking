@@ -3,6 +3,7 @@ import { Sparkles, Zap } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { formatInj } from '../utils/formatNumber'
 import EpochCountdown from './EpochCountdown'
+import ActivityTicker from './ActivityTicker'
 
 export default function HeroSection() {
   const exchangeRate = useStore((s) => s.exchangeRate)
@@ -73,6 +74,9 @@ export default function HeroSection() {
             <div style={styles.statLabel}>csINJ Rate</div>
           </div>
         </div>
+
+        {/* Activity Ticker */}
+        <ActivityTicker />
       </div>
     </section>
   )
