@@ -1,25 +1,10 @@
 import React, { useState } from 'react'
-import { Sparkles, ChevronDown, Wallet, LogOut, Copy, Check, ExternalLink } from 'lucide-react'
+import { Sparkles, ChevronDown, Wallet, LogOut, Copy, Check } from 'lucide-react'
+import { useStore } from '../store/useStore'
+import type { WalletType } from '../store/useStore'
 
-interface HeaderProps {
-  isConnected: boolean
-  address: string
-  injectiveAddress: string
-  walletType: string | null
-  isConnecting: boolean
-  onConnect: (type: 'metamask' | 'keplr' | 'leap' | 'rabby') => void
-  onDisconnect: () => void
-}
-
-export default function Header({
-  isConnected,
-  address,
-  injectiveAddress,
-  walletType,
-  isConnecting,
-  onConnect,
-  onDisconnect,
-}: HeaderProps) {
+export default function Header() {
+  const { isConnected, address, injectiveAddress, walletType, isConnecting, connect, disconnect } = useStore()
   const [showWalletMenu, setShowWalletMenu] = useState(false)
   const [showAccountMenu, setShowAccountMenu] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -35,11 +20,11 @@ export default function Header({
     setTimeout(() => setCopied(false), 2000)
   }
 
-  const wallets = [
-    { id: 'keplr' as const, name: 'Keplr', icon: '🔑' },
-    { id: 'leap' as const, name: 'Leap', icon: '🦘' },
-    { id: 'metamask' as const, name: 'MetaMask', icon: '🦊' },
-    { id: 'rabby' as const, name: 'Rabby', icon: '🐰' },
+  const wallets: { id: WalletType; name: string; icon: string }[] = [
+    { id: 'keplr', name: 'Keplr', icon: '🔑' },
+    { id: 'leap', name: 'Leap', icon: '🦘' },
+    { id: 'metamask', name: 'MetaMask', icon: '🦊' },
+    { id: 'rabby', name: 'Rabby', icon: '🐰' },
   ]
 
   return (
@@ -59,8 +44,7 @@ export default function Header({
         <nav style={styles.nav}>
           <a href="#stake" style={styles.navLink}>Stake</a>
           <a href="#draws" style={styles.navLink}>Draws</a>
-          <a href="#stats" style={styles.navLink}>Stats</a>
-          <a href="#docs" style={styles.navLink}>Docs</a>
+          {isConnected && <a href="#portfolio" style={styles.navLink}>Portfolio</a>}
         </nav>
 
         <div style={styles.walletSection}>
@@ -81,7 +65,7 @@ export default function Header({
                       key={w.id}
                       style={styles.walletOption}
                       onClick={() => {
-                        onConnect(w.id)
+                        connect(w.id)
                         setShowWalletMenu(false)
                       }}
                     >
@@ -115,7 +99,7 @@ export default function Header({
                     <span>{copied ? 'Copied!' : 'Copy Address'}</span>
                   </button>
                   <button style={styles.accountAction} onClick={() => {
-                    onDisconnect()
+                    disconnect()
                     setShowAccountMenu(false)
                   }}>
                     <LogOut size={14} />

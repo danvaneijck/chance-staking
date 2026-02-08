@@ -1,10 +1,23 @@
 import React from 'react'
-import { Sparkles, TrendingUp, Shield, Zap } from 'lucide-react'
+import { Sparkles, Zap } from 'lucide-react'
+import { useStore } from '../store/useStore'
+import { INJ_DECIMALS } from '../config'
+
+function formatInj(raw: string): string {
+  const n = parseFloat(raw) / 10 ** INJ_DECIMALS
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return n.toFixed(1)
+}
 
 export default function HeroSection() {
+  const exchangeRate = useStore((s) => s.exchangeRate)
+  const totalStaked = useStore((s) => s.totalInjBacking)
+  const totalRewardsDistributed = useStore((s) => s.totalRewardsDistributed)
+  const totalDrawsCompleted = useStore((s) => s.totalDrawsCompleted)
+
   return (
     <section style={styles.hero}>
-      {/* Background effects */}
       <div style={styles.bgGlow1} />
       <div style={styles.bgGlow2} />
       <div style={styles.bgGrid} />
@@ -27,33 +40,37 @@ export default function HeroSection() {
         </p>
 
         <div style={styles.ctaRow}>
-          <button style={styles.primaryCta}>
-            <Zap size={18} />
-            Start Staking
-          </button>
-          <button style={styles.secondaryCta}>
-            Learn How It Works
-          </button>
+          <a href="#stake" style={{ textDecoration: 'none' }}>
+            <button style={styles.primaryCta}>
+              <Zap size={18} />
+              Start Staking
+            </button>
+          </a>
+          <a href="#how-it-works" style={{ textDecoration: 'none' }}>
+            <button style={styles.secondaryCta}>
+              Learn How It Works
+            </button>
+          </a>
         </div>
 
         <div style={styles.statsRow}>
           <div style={styles.statCard}>
-            <div style={styles.statValue}>$12.4M</div>
+            <div style={styles.statValue}>{formatInj(totalStaked)} INJ</div>
             <div style={styles.statLabel}>Total Value Locked</div>
           </div>
           <div style={styles.statDivider} />
           <div style={styles.statCard}>
-            <div style={styles.statValue}>2,847</div>
-            <div style={styles.statLabel}>Active Stakers</div>
+            <div style={styles.statValue}>{totalDrawsCompleted}</div>
+            <div style={styles.statLabel}>Draws Completed</div>
           </div>
           <div style={styles.statDivider} />
           <div style={styles.statCard}>
-            <div style={styles.statValue}>$847K</div>
+            <div style={styles.statValue}>{formatInj(totalRewardsDistributed)} INJ</div>
             <div style={styles.statLabel}>Total Prizes Won</div>
           </div>
           <div style={styles.statDivider} />
           <div style={styles.statCard}>
-            <div style={styles.statValue}>1.042</div>
+            <div style={styles.statValue}>{parseFloat(exchangeRate).toFixed(4)}</div>
             <div style={styles.statLabel}>csINJ Rate</div>
           </div>
         </div>
