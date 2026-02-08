@@ -10,7 +10,7 @@ use crate::error::ContractError;
 use crate::msg::DistributorExecuteMsg;
 use crate::state::{
     UnstakeRequest, CONFIG, EPOCH_STATE, EXCHANGE_RATE, NEXT_UNSTAKE_ID,
-    TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING, UNSTAKE_REQUESTS,
+    PENDING_UNSTAKE_TOTAL, TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING, UNSTAKE_REQUESTS,
 };
 
 type ContractResponse = cosmwasm_std::Response<InjectiveMsgWrapper>;
@@ -185,6 +185,10 @@ pub fn unstake(
     UNSTAKE_REQUESTS.save(deps.storage, (&info.sender, request_id), &request)?;
     NEXT_UNSTAKE_ID.save(deps.storage, &info.sender, &(request_id + 1))?;
 
+    // Update pending unstake counter (O(1) instead of iterating all requests)
+    let pending_total = PENDING_UNSTAKE_TOTAL.load(deps.storage)?;
+    PENDING_UNSTAKE_TOTAL.save(deps.storage, &(pending_total + inj_amount))?;
+
     // Burn csINJ via Token Factory
     let burn_msg = create_burn_tokens_msg(
         env.contract.address.clone(),
@@ -252,6 +256,13 @@ pub fn claim_unstaked(
         UNSTAKE_REQUESTS.save(deps.storage, (&info.sender, *id), &request)?;
         total_claim += request.inj_amount;
     }
+
+    // Update pending unstake counter (O(1) instead of iterating all requests)
+    let pending_total = PENDING_UNSTAKE_TOTAL.load(deps.storage)?;
+    PENDING_UNSTAKE_TOTAL.save(
+        deps.storage,
+        &pending_total.checked_sub(total_claim).unwrap_or(Uint128::zero()),
+    )?;
 
     let send_msg = BankMsg::Send {
         to_address: info.sender.to_string(),
@@ -336,10 +347,9 @@ pub fn distribute_rewards(
     // Query this contract's current INJ balance
     let contract_balance = query_contract_inj_balance(deps.querier, &env)?;
 
-    // Calculate reserved INJ: total backing (delegated INJ value owed to csINJ holders)
-    // The contract's "free" balance is whatever INJ is sitting in the contract beyond
-    // what's reserved for pending unstake claims.
-    let reserved = query_pending_unstake_total(deps.as_ref().storage)?;
+    // Calculate reserved INJ: total pending unstake claims not yet collected.
+    // Uses the O(1) counter instead of iterating all requests.
+    let reserved = PENDING_UNSTAKE_TOTAL.load(deps.storage)?;
     let total_rewards = contract_balance.saturating_sub(reserved);
 
     // Split rewards according to basis points
@@ -427,19 +437,6 @@ fn query_contract_inj_balance(querier: QuerierWrapper, env: &Env) -> Result<Uint
     Ok(balance.amount)
 }
 
-/// Sum of all pending (unclaimed, unlocked or not) unstake request amounts.
-fn query_pending_unstake_total(
-    storage: &dyn cosmwasm_std::Storage,
-) -> Result<Uint128, ContractError> {
-    let mut total = Uint128::zero();
-    for result in UNSTAKE_REQUESTS.range(storage, None, None, cosmwasm_std::Order::Ascending) {
-        let (_, request) = result?;
-        if !request.claimed {
-            total += request.inj_amount;
-        }
-    }
-    Ok(total)
-}
 
 /// Submit a snapshot merkle root for the current epoch. Operator only.
 pub fn take_snapshot(

@@ -85,7 +85,11 @@ pub enum QueryMsg {
     #[returns(PoolBalancesResponse)]
     PoolBalances {},
     #[returns(UserWinsResponse)]
-    UserWins { address: String },
+    UserWins {
+        address: String,
+        start_after: Option<u64>,
+        limit: Option<u32>,
+    },
     #[returns(Vec<Draw>)]
     UserWinDetails {
         address: String,

@@ -127,7 +127,11 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             query::query_draw_history(deps, start_after, limit)
         }
         QueryMsg::PoolBalances {} => query::query_pool_balances(deps),
-        QueryMsg::UserWins { address } => query::query_user_wins(deps, address),
+        QueryMsg::UserWins {
+            address,
+            start_after,
+            limit,
+        } => query::query_user_wins(deps, address, start_after, limit),
         QueryMsg::UserWinDetails {
             address,
             start_after,

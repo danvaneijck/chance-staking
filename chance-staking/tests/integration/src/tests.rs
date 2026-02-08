@@ -281,6 +281,8 @@ fn test_unstake_flow() {
             mock_env(),
             chance_staking_hub::msg::QueryMsg::UnstakeRequests {
                 address: user1.to_string(),
+                start_after: None,
+                limit: None,
             },
         )
         .unwrap(),
@@ -334,6 +336,8 @@ fn test_unstake_flow() {
             mock_env(),
             chance_staking_hub::msg::QueryMsg::UnstakeRequests {
                 address: deps.api.addr_make("user1").to_string(),
+                start_after: None,
+                limit: None,
             },
         )
         .unwrap(),

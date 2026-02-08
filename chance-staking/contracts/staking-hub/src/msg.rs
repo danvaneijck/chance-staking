@@ -76,7 +76,11 @@ pub enum QueryMsg {
     #[returns(ExchangeRateResponse)]
     ExchangeRate {},
     #[returns(Vec<UnstakeRequestEntry>)]
-    UnstakeRequests { address: String },
+    UnstakeRequests {
+        address: String,
+        start_after: Option<u64>,
+        limit: Option<u32>,
+    },
 }
 
 #[cw_serde]
