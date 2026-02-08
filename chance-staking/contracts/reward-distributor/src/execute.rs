@@ -129,6 +129,8 @@ pub fn set_snapshot(
 }
 
 /// Commit to a draw. Operator only.
+/// Reward amount is the full pool balance at commit time.
+/// Epoch spacing is enforced per draw type.
 pub fn commit_draw(
     deps: DepsMut,
     env: Env,
@@ -139,7 +141,6 @@ pub fn commit_draw(
         draw_type,
         operator_commit,
         target_drand_round,
-        reward_amount,
         epoch,
     } = params;
 
@@ -157,27 +158,51 @@ pub fn commit_draw(
 
     let mut state = DRAW_STATE.load(deps.storage)?;
 
-    // Deduct from appropriate pool
-    match draw_type {
+    // Enforce epoch spacing and take full pool balance as reward
+    let reward_amount = match draw_type {
         DrawType::Regular => {
-            if state.regular_pool_balance < reward_amount {
-                return Err(ContractError::InsufficientPool {
-                    needed: reward_amount.to_string(),
-                    available: state.regular_pool_balance.to_string(),
+            if let Some(last) = state.last_regular_draw_epoch {
+                if epoch < last + config.epochs_between_regular {
+                    return Err(ContractError::DrawTooSoon {
+                        draw_type: "regular".to_string(),
+                        epoch,
+                        last_epoch: last,
+                        min_gap: config.epochs_between_regular,
+                    });
+                }
+            }
+            if state.regular_pool_balance.is_zero() {
+                return Err(ContractError::EmptyPool {
+                    pool: "regular".to_string(),
                 });
             }
-            state.regular_pool_balance -= reward_amount;
+            let amount = state.regular_pool_balance;
+            state.regular_pool_balance = Uint128::zero();
+            state.last_regular_draw_epoch = Some(epoch);
+            amount
         }
         DrawType::Big => {
-            if state.big_pool_balance < reward_amount {
-                return Err(ContractError::InsufficientPool {
-                    needed: reward_amount.to_string(),
-                    available: state.big_pool_balance.to_string(),
+            if let Some(last) = state.last_big_draw_epoch {
+                if epoch < last + config.epochs_between_big {
+                    return Err(ContractError::DrawTooSoon {
+                        draw_type: "big".to_string(),
+                        epoch,
+                        last_epoch: last,
+                        min_gap: config.epochs_between_big,
+                    });
+                }
+            }
+            if state.big_pool_balance.is_zero() {
+                return Err(ContractError::EmptyPool {
+                    pool: "big".to_string(),
                 });
             }
-            state.big_pool_balance -= reward_amount;
+            let amount = state.big_pool_balance;
+            state.big_pool_balance = Uint128::zero();
+            state.last_big_draw_epoch = Some(epoch);
+            amount
         }
-    }
+    };
 
     let draw_id = state.next_draw_id;
     state.next_draw_id += 1;
@@ -479,8 +504,8 @@ pub fn update_config(
         operator,
         staking_hub,
         reveal_deadline_seconds,
-        regular_draw_reward,
-        big_draw_reward,
+        epochs_between_regular,
+        epochs_between_big,
     } = params;
 
     let mut config = CONFIG.load(deps.storage)?;
@@ -500,11 +525,11 @@ pub fn update_config(
     if let Some(deadline) = reveal_deadline_seconds {
         config.reveal_deadline_seconds = deadline;
     }
-    if let Some(reward) = regular_draw_reward {
-        config.regular_draw_reward = reward;
+    if let Some(gap) = epochs_between_regular {
+        config.epochs_between_regular = gap;
     }
-    if let Some(reward) = big_draw_reward {
-        config.big_draw_reward = reward;
+    if let Some(gap) = epochs_between_big {
+        config.epochs_between_big = gap;
     }
 
     CONFIG.save(deps.storage, &config)?;

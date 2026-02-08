@@ -101,8 +101,8 @@ fn distributor_instantiate_msg() -> chance_reward_distributor::msg::InstantiateM
         staking_hub: mock_api.addr_make("staking_hub").to_string(),
         drand_oracle: mock_api.addr_make("drand_oracle").to_string(),
         reveal_deadline_seconds: 3600,
-        regular_draw_reward: Uint128::from(10_000_000u128),
-        big_draw_reward: Uint128::from(100_000_000u128),
+        epochs_between_regular: 1,
+        epochs_between_big: 7,
     }
 }
 
@@ -546,13 +546,12 @@ fn test_expired_draw() {
             draw_type: chance_staking_common::types::DrawType::Regular,
             operator_commit: hex::encode(commit),
             target_drand_round: 1000,
-            reward_amount: Uint128::from(10_000_000u128),
             epoch: 1,
         },
     )
     .unwrap();
 
-    // Verify pool balance decreased
+    // Verify pool fully drained
     let state: chance_reward_distributor::state::DrawStateInfo = from_json(
         chance_reward_distributor::contract::query(
             deps.as_ref(),
@@ -562,7 +561,7 @@ fn test_expired_draw() {
         .unwrap(),
     )
     .unwrap();
-    assert_eq!(state.regular_pool_balance, Uint128::from(40_000_000u128));
+    assert_eq!(state.regular_pool_balance, Uint128::zero());
 
     // Try expire too early → should fail
     let anyone = deps.api.addr_make("anyone");
@@ -754,7 +753,6 @@ fn test_full_stake_and_draw_cycle() {
             draw_type: chance_staking_common::types::DrawType::Regular,
             operator_commit: commit_hex,
             target_drand_round: TEST_ROUND,
-            reward_amount: Uint128::from(10_000_000u128),
             epoch: 1,
         },
     )
@@ -869,9 +867,10 @@ fn test_full_stake_and_draw_cycle() {
     )
     .unwrap();
     assert_eq!(state.total_draws_completed, 1);
+    // Full pool (50M) was awarded
     assert_eq!(
         state.total_rewards_distributed,
-        Uint128::from(10_000_000u128)
+        Uint128::from(50_000_000u128)
     );
 
     eprintln!("test_full_stake_and_draw_cycle passed");
@@ -918,9 +917,10 @@ fn test_merkle_proof_verification_e2e() {
 }
 
 #[test]
-fn test_multiple_draws_per_epoch() {
-    // Test that multiple commit-reveal cycles can happen within the same epoch.
-    // We run 3 consecutive draws, verifying pool balance decreases correctly.
+fn test_multiple_draws_across_epochs() {
+    // Test that multiple commit-reveal cycles work across epochs.
+    // epochs_between_regular = 1, so we draw at epochs 1, 2, 3.
+    // Each epoch gets funded and draws the full pool balance.
 
     let mut dist_deps = mock_dependencies();
 
@@ -956,42 +956,45 @@ fn test_multiple_draws_per_epoch() {
     let root_hex = hex::encode(root);
     let total_weight = Uint128::from(1000u128);
 
-    // Fund pool with enough for 3 draws
-    let staking_hub = dist_deps.api.addr_make("staking_hub");
-    let info = message_info(&staking_hub, &[Coin::new(50_000_000u128, "inj")]);
-    chance_reward_distributor::contract::execute(
-        dist_deps.as_mut(),
-        mock_env(),
-        info,
-        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
-    )
-    .unwrap();
-
-    // Set snapshot
-    let staking_hub = dist_deps.api.addr_make("staking_hub");
-    let info = message_info(&staking_hub, &[]);
-    chance_reward_distributor::contract::execute(
-        dist_deps.as_mut(),
-        mock_env(),
-        info,
-        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
-            epoch: 1,
-            merkle_root: root_hex.clone(),
-            total_weight,
-            num_holders: 2,
-        },
-    )
-    .unwrap();
-
-    let reward_per_draw = Uint128::from(10_000_000u128);
+    let fund_per_epoch = Uint128::from(10_000_000u128);
+    let mut total_distributed = Uint128::zero();
 
     for draw_num in 0u64..3 {
-        // Each draw uses a different secret to get different outcomes
+        let epoch = draw_num + 1;
+
+        // Fund pool for this epoch
+        let staking_hub = dist_deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &[Coin::new(fund_per_epoch.u128(), "inj")]);
+        chance_reward_distributor::contract::execute(
+            dist_deps.as_mut(),
+            mock_env(),
+            info,
+            chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+        )
+        .unwrap();
+
+        // Set snapshot for this epoch
+        let staking_hub = dist_deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &[]);
+        chance_reward_distributor::contract::execute(
+            dist_deps.as_mut(),
+            mock_env(),
+            info,
+            chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+                epoch,
+                merkle_root: root_hex.clone(),
+                total_weight,
+                num_holders: 2,
+            },
+        )
+        .unwrap();
+
+        // Each draw uses a different secret
         let secret = format!("secret_{}", draw_num);
         let secret_bytes = secret.as_bytes();
         let commit: [u8; 32] = Sha256::digest(secret_bytes).into();
 
-        // Commit
+        // Commit (reward = full pool balance)
         let operator = dist_deps.api.addr_make("operator");
         let info = message_info(&operator, &[]);
         chance_reward_distributor::contract::execute(
@@ -1002,8 +1005,7 @@ fn test_multiple_draws_per_epoch() {
                 draw_type: chance_staking_common::types::DrawType::Regular,
                 operator_commit: hex::encode(commit),
                 target_drand_round: TEST_ROUND,
-                reward_amount: reward_per_draw,
-                epoch: 1,
+                epoch,
             },
         )
         .unwrap();
@@ -1053,7 +1055,9 @@ fn test_multiple_draws_per_epoch() {
         )
         .unwrap();
 
-        // Verify pool balance decreased
+        total_distributed += fund_per_epoch;
+
+        // Verify pool is drained after each draw
         let state: chance_reward_distributor::state::DrawStateInfo = from_json(
             chance_reward_distributor::contract::query(
                 dist_deps.as_ref(),
@@ -1063,11 +1067,10 @@ fn test_multiple_draws_per_epoch() {
             .unwrap(),
         )
         .unwrap();
-        let expected_pool =
-            Uint128::from(50_000_000u128) - reward_per_draw * Uint128::from(draw_num + 1);
         assert_eq!(
-            state.regular_pool_balance, expected_pool,
-            "Pool balance should decrease by reward_per_draw each draw"
+            state.regular_pool_balance,
+            Uint128::zero(),
+            "Pool should be fully drained after each draw"
         );
         assert_eq!(state.total_draws_completed, draw_num + 1);
     }
@@ -1083,11 +1086,8 @@ fn test_multiple_draws_per_epoch() {
     )
     .unwrap();
     assert_eq!(state.total_draws_completed, 3);
-    assert_eq!(
-        state.total_rewards_distributed,
-        Uint128::from(30_000_000u128)
-    );
-    assert_eq!(state.regular_pool_balance, Uint128::from(20_000_000u128));
+    assert_eq!(state.total_rewards_distributed, total_distributed);
+    assert_eq!(state.regular_pool_balance, Uint128::zero());
 
-    eprintln!("test_multiple_draws_per_epoch passed");
+    eprintln!("test_multiple_draws_across_epochs passed");
 }

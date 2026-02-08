@@ -44,8 +44,8 @@ QUICKNET_PERIOD_SECONDS=3
 
 # -- Reward distributor config --
 REVEAL_DEADLINE_SECONDS=180
-REGULAR_DRAW_REWARD="1000000"
-BIG_DRAW_REWARD="5000000"
+EPOCHS_BETWEEN_REGULAR=1
+EPOCHS_BETWEEN_BIG=7
 
 # -- Staking hub config --
 EPOCH_DURATION_SECONDS=120
@@ -267,8 +267,8 @@ DISTRIBUTOR_INIT_MSG=$(cat <<EOF
   "staking_hub": "$ADMIN_ADDRESS",
   "drand_oracle": "$DRAND_ORACLE_ADDRESS",
   "reveal_deadline_seconds": $REVEAL_DEADLINE_SECONDS,
-  "regular_draw_reward": "$REGULAR_DRAW_REWARD",
-  "big_draw_reward": "$BIG_DRAW_REWARD"
+  "epochs_between_regular": $EPOCHS_BETWEEN_REGULAR,
+  "epochs_between_big": $EPOCHS_BETWEEN_BIG
 }
 EOF
 )

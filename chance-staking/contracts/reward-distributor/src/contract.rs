@@ -29,8 +29,8 @@ pub fn instantiate(
         staking_hub: deps.api.addr_validate(&msg.staking_hub)?,
         drand_oracle: deps.api.addr_validate(&msg.drand_oracle)?,
         reveal_deadline_seconds: msg.reveal_deadline_seconds,
-        regular_draw_reward: msg.regular_draw_reward,
-        big_draw_reward: msg.big_draw_reward,
+        epochs_between_regular: msg.epochs_between_regular,
+        epochs_between_big: msg.epochs_between_big,
     };
     CONFIG.save(deps.storage, &config)?;
 
@@ -40,6 +40,8 @@ pub fn instantiate(
         big_pool_balance: Uint128::zero(),
         total_draws_completed: 0,
         total_rewards_distributed: Uint128::zero(),
+        last_regular_draw_epoch: None,
+        last_big_draw_epoch: None,
     };
     DRAW_STATE.save(deps.storage, &draw_state)?;
 
@@ -77,7 +79,6 @@ pub fn execute(
             draw_type,
             operator_commit,
             target_drand_round,
-            reward_amount,
             epoch,
         } => execute::commit_draw(
             deps,
@@ -87,7 +88,6 @@ pub fn execute(
                 draw_type,
                 operator_commit,
                 target_drand_round,
-                reward_amount,
                 epoch,
             },
         ),
@@ -116,8 +116,8 @@ pub fn execute(
             operator,
             staking_hub,
             reveal_deadline_seconds,
-            regular_draw_reward,
-            big_draw_reward,
+            epochs_between_regular,
+            epochs_between_big,
         } => execute::update_config(
             deps,
             env,
@@ -126,8 +126,8 @@ pub fn execute(
                 operator,
                 staking_hub,
                 reveal_deadline_seconds,
-                regular_draw_reward,
-                big_draw_reward,
+                epochs_between_regular,
+                epochs_between_big,
             },
         ),
     }
@@ -188,8 +188,8 @@ mod tests {
             staking_hub: mock_api.addr_make("staking_hub").to_string(),
             drand_oracle: mock_api.addr_make("drand_oracle").to_string(),
             reveal_deadline_seconds: 3600,
-            regular_draw_reward: Uint128::from(10_000_000u128),
-            big_draw_reward: Uint128::from(100_000_000u128),
+            epochs_between_regular: 1,
+            epochs_between_big: 7,
         }
     }
 
@@ -297,7 +297,6 @@ mod tests {
                 draw_type: DrawType::Regular,
                 operator_commit: hex::encode(commit),
                 target_drand_round: 1000,
-                reward_amount: Uint128::from(10_000_000u128),
                 epoch: 1,
             },
         )
@@ -352,7 +351,6 @@ mod tests {
                 draw_type: DrawType::Regular,
                 operator_commit: commit_hex.clone(),
                 target_drand_round: 1000,
-                reward_amount: Uint128::from(10_000_000u128),
                 epoch: 1,
             },
         )
@@ -361,28 +359,20 @@ mod tests {
         let draw = DRAWS.load(deps.as_ref().storage, 0).unwrap();
         assert_eq!(draw.status, DrawStatus::Committed);
         assert_eq!(draw.operator_commit, commit_hex);
-        assert_eq!(draw.reward_amount, Uint128::from(10_000_000u128));
+        // Reward = full pool balance
+        assert_eq!(draw.reward_amount, Uint128::from(50_000_000u128));
 
         let state = DRAW_STATE.load(deps.as_ref().storage).unwrap();
-        assert_eq!(state.regular_pool_balance, Uint128::from(40_000_000u128));
+        assert_eq!(state.regular_pool_balance, Uint128::zero());
         assert_eq!(state.next_draw_id, 1);
     }
 
     #[test]
-    fn test_commit_draw_insufficient_pool() {
+    fn test_commit_draw_empty_pool() {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
-        let staking_hub = deps.api.addr_make("staking_hub");
-        let info = message_info(&staking_hub, &coins(5_000_000, "inj"));
-        execute(
-            deps.as_mut(),
-            mock_env(),
-            info,
-            ExecuteMsg::FundRegularPool {},
-        )
-        .unwrap();
-
+        // Set snapshot but don't fund the pool
         let staking_hub = deps.api.addr_make("staking_hub");
         let info = message_info(&staking_hub, &[]);
         execute(
@@ -411,12 +401,11 @@ mod tests {
                 draw_type: DrawType::Regular,
                 operator_commit: hex::encode(commit),
                 target_drand_round: 1000,
-                reward_amount: Uint128::from(10_000_000u128),
                 epoch: 1,
             },
         )
         .unwrap_err();
-        assert!(matches!(err, ContractError::InsufficientPool { .. }));
+        assert!(matches!(err, ContractError::EmptyPool { .. }));
     }
 
     #[test]
@@ -461,7 +450,6 @@ mod tests {
                 draw_type: DrawType::Regular,
                 operator_commit: hex::encode(commit),
                 target_drand_round: 1000,
-                reward_amount: Uint128::from(10_000_000u128),
                 epoch: 1,
             },
         )
@@ -542,7 +530,6 @@ mod tests {
                 draw_type: DrawType::Regular,
                 operator_commit: hex::encode(commit),
                 target_drand_round: 1000,
-                reward_amount: Uint128::from(10_000_000u128),
                 epoch: 1,
             },
         )
@@ -610,7 +597,6 @@ mod tests {
                 draw_type: DrawType::Regular,
                 operator_commit: hex::encode(commit),
                 target_drand_round: 1000,
-                reward_amount: Uint128::from(10_000_000u128),
                 epoch: 1,
             },
         )
