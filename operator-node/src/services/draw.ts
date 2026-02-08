@@ -191,8 +191,6 @@ export async function revealDraw(drawId: number): Promise<string> {
   // Ensure the drand beacon is available on-chain
   const storedBeacon = await getStoredBeacon(draw.target_drand_round);
   if (!storedBeacon) {
-    // Try to fetch and submit it
-    logger.info(`Submitting drand beacon for round ${draw.target_drand_round}`);
     await submitSpecificRound(draw.target_drand_round);
   }
 
@@ -319,46 +317,40 @@ export async function checkAndCommitDraws(): Promise<void> {
   const pools = await getPoolBalances();
   const distributorConfig = await getDistributorConfig();
 
+  // Check existing draws for this epoch (committed or revealed)
+  const draws = await getDrawHistory(undefined, 20);
+  const hasRegularThisEpoch = draws.some(
+    (d) =>
+      d.draw_type === "regular" &&
+      d.epoch === epochState.current_epoch &&
+      (d.status === "committed" || d.status === "revealed")
+  );
+  const hasBigThisEpoch = draws.some(
+    (d) =>
+      d.draw_type === "big" &&
+      d.epoch === epochState.current_epoch &&
+      (d.status === "committed" || d.status === "revealed")
+  );
+
   // Check if we should commit a regular draw
   const regularPool = BigInt(pools.regular_pool);
   const regularReward = BigInt(distributorConfig.regular_draw_reward);
-  if (regularPool >= regularReward) {
-    // Check if there's already a pending regular draw for this epoch
-    const draws = await getDrawHistory(undefined, 10);
-    const hasActiveRegular = draws.some(
-      (d) =>
-        d.draw_type === "regular" &&
-        d.epoch === epochState.current_epoch &&
-        d.status === "committed"
-    );
-
-    if (!hasActiveRegular) {
-      try {
-        await commitDraw("regular", epochState.current_epoch);
-      } catch (err) {
-        logger.error("Failed to commit regular draw:", err);
-      }
+  if (regularPool >= regularReward && !hasRegularThisEpoch) {
+    try {
+      await commitDraw("regular", epochState.current_epoch);
+    } catch (err) {
+      logger.error("Failed to commit regular draw:", err);
     }
   }
 
   // Check if we should commit a big draw
   const bigPool = BigInt(pools.big_pool);
   const bigReward = BigInt(distributorConfig.big_draw_reward);
-  if (bigPool >= bigReward) {
-    const draws = await getDrawHistory(undefined, 10);
-    const hasActiveBig = draws.some(
-      (d) =>
-        d.draw_type === "big" &&
-        d.epoch === epochState.current_epoch &&
-        d.status === "committed"
-    );
-
-    if (!hasActiveBig) {
-      try {
-        await commitDraw("big", epochState.current_epoch);
-      } catch (err) {
-        logger.error("Failed to commit big draw:", err);
-      }
+  if (bigPool >= bigReward && !hasBigThisEpoch) {
+    try {
+      await commitDraw("big", epochState.current_epoch);
+    } catch (err) {
+      logger.error("Failed to commit big draw:", err);
     }
   }
 }
