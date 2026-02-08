@@ -2,7 +2,7 @@ import { config } from "./config";
 import { logger } from "./utils/logger";
 import { getOperatorAddress } from "./clients";
 import { syncDrandBeacons } from "./services/drand";
-import { checkAndAdvanceEpoch, getEpochState } from "./services/epoch";
+import { checkAndAdvanceEpoch, getEpochState, ensureSnapshotCached } from "./services/epoch";
 import { checkAndCommitDraws, checkAndRevealDraws, getDrawState } from "./services/draw";
 
 function sleep(ms: number): Promise<void> {
@@ -73,6 +73,9 @@ async function main(): Promise<void> {
   logger.info(`  Reward Distributor:  ${config.contracts.rewardDistributor}`);
 
   await logStatus();
+
+  // Ensure snapshot cache is available for any pending draw reveals
+  await ensureSnapshotCached();
 
   // Run all loops concurrently
   logger.info("Starting operator loops...");

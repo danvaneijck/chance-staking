@@ -1,3 +1,5 @@
+import * as fs from "fs";
+import * as path from "path";
 import { queryContract, executeContract } from "../clients";
 import { config } from "../config";
 import { logger } from "../utils/logger";
@@ -54,7 +56,44 @@ interface PoolBalancesResponse {
 }
 
 // Track secrets for committed draws so we can reveal them later
+// Persisted to disk so they survive node restarts
+const SECRETS_FILE = path.join(process.cwd(), "data", "pending_secrets.json");
+
 const pendingDrawSecrets = new Map<number, Buffer>();
+
+function ensureDataDir(): void {
+  const dir = path.dirname(SECRETS_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
+function saveSecretsToDisk(): void {
+  ensureDataDir();
+  const data: Record<string, string> = {};
+  for (const [drawId, secret] of pendingDrawSecrets) {
+    data[drawId.toString()] = secret.toString("hex");
+  }
+  fs.writeFileSync(SECRETS_FILE, JSON.stringify(data, null, 2));
+  logger.debug(`Saved ${pendingDrawSecrets.size} pending secrets to disk`);
+}
+
+function loadSecretsFromDisk(): void {
+  if (!fs.existsSync(SECRETS_FILE)) return;
+  try {
+    const raw = fs.readFileSync(SECRETS_FILE, "utf-8");
+    const data = JSON.parse(raw) as Record<string, string>;
+    for (const [drawIdStr, secretHex] of Object.entries(data)) {
+      pendingDrawSecrets.set(parseInt(drawIdStr, 10), Buffer.from(secretHex, "hex"));
+    }
+    logger.info(`Loaded ${pendingDrawSecrets.size} pending secrets from disk`);
+  } catch (err) {
+    logger.error("Failed to load secrets from disk:", err);
+  }
+}
+
+// Load secrets on module initialization
+loadSecretsFromDisk();
 
 export async function getDrawState(): Promise<DrawStateInfo> {
   return queryContract<DrawStateInfo>(config.contracts.rewardDistributor, { draw_state: {} });
@@ -127,8 +166,9 @@ export async function commitDraw(
     },
   });
 
-  // Store the secret for later reveal
+  // Store the secret for later reveal (persisted to disk)
   pendingDrawSecrets.set(nextDrawId, secret);
+  saveSecretsToDisk();
   logger.info(`Draw ${nextDrawId} committed, secret stored for reveal`);
 
   return { drawId: nextDrawId, targetRound };
@@ -201,19 +241,45 @@ export async function revealDraw(drawId: number): Promise<string> {
   });
 
   pendingDrawSecrets.delete(drawId);
+  saveSecretsToDisk();
   logger.info(`Draw ${drawId} revealed! Winner: ${winner.address}, tx: ${txHash}`);
 
   return txHash;
 }
 
-export async function checkAndRevealDraws(): Promise<void> {
-  const drawState = await getDrawState();
+export async function expireDraw(drawId: number): Promise<string> {
+  logger.info(`Expiring draw ${drawId} (past reveal deadline)`);
+  const txHash = await executeContract(config.contracts.rewardDistributor, {
+    expire_draw: { draw_id: drawId },
+  });
+  // Clean up any stale secret for this draw
+  if (pendingDrawSecrets.has(drawId)) {
+    pendingDrawSecrets.delete(drawId);
+    saveSecretsToDisk();
+  }
+  logger.info(`Draw ${drawId} expired, funds returned to pool. tx: ${txHash}`);
+  return txHash;
+}
 
+export async function checkAndRevealDraws(): Promise<void> {
   // Check recent draws for any that are committed and ready to reveal
   const draws = await getDrawHistory(undefined, 20);
+  const nowNanos = BigInt(Date.now()) * BigInt(1_000_000);
 
   for (const draw of draws) {
     if (draw.status !== "committed") continue;
+
+    const deadlineNanos = BigInt(draw.reveal_deadline);
+
+    // If past deadline, expire it regardless of whether we have the secret
+    if (nowNanos > deadlineNanos) {
+      try {
+        await expireDraw(draw.id);
+      } catch (err) {
+        logger.error(`Error expiring draw ${draw.id}:`, err);
+      }
+      continue;
+    }
 
     if (!pendingDrawSecrets.has(draw.id)) {
       logger.warn(

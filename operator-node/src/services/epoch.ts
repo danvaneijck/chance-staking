@@ -1,8 +1,10 @@
+import * as fs from "fs";
+import * as path from "path";
 import { queryContract, executeContract } from "../clients";
 import { config } from "../config";
 import { logger } from "../utils/logger";
 import { getStakingHubConfig, fetchAllCsInjHolders, buildSnapshotEntries } from "./snapshot";
-import { buildMerkleTree } from "./merkle";
+import { buildMerkleTree, SnapshotEntry } from "./merkle";
 
 interface EpochState {
   current_epoch: number;
@@ -45,8 +47,9 @@ export async function takeSnapshot(): Promise<string> {
     `Snapshot built: ${entries.length} holders, total weight: ${totalWeight}, root: ${root}`
   );
 
-  // Store snapshot data for later use in draw reveals
+  // Store snapshot data for later use in draw reveals (persisted to disk)
   snapshotCache = { entries, root, totalWeight };
+  saveSnapshotToDisk();
 
   const txHash = await executeContract(config.contracts.stakingHub, {
     take_snapshot: {
@@ -61,17 +64,84 @@ export async function takeSnapshot(): Promise<string> {
   return txHash;
 }
 
-// In-memory cache of the latest snapshot for draw reveals
-interface SnapshotCache {
-  entries: ReturnType<typeof buildSnapshotEntries>;
+// Cache of the latest snapshot for draw reveals, persisted to disk
+export interface SnapshotCache {
+  entries: SnapshotEntry[];
   root: string;
   totalWeight: string;
 }
 
+const SNAPSHOT_FILE = path.join(process.cwd(), "data", "snapshot_cache.json");
+
 let snapshotCache: SnapshotCache | null = null;
+
+function ensureDataDir(): void {
+  const dir = path.dirname(SNAPSHOT_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
+function saveSnapshotToDisk(): void {
+  if (!snapshotCache) return;
+  ensureDataDir();
+  fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(snapshotCache));
+  logger.debug("Saved snapshot cache to disk");
+}
+
+function loadSnapshotFromDisk(): void {
+  if (!fs.existsSync(SNAPSHOT_FILE)) return;
+  try {
+    const raw = fs.readFileSync(SNAPSHOT_FILE, "utf-8");
+    snapshotCache = JSON.parse(raw) as SnapshotCache;
+    logger.info(
+      `Loaded snapshot cache from disk: ${snapshotCache.entries.length} entries, root: ${snapshotCache.root}`
+    );
+  } catch (err) {
+    logger.error("Failed to load snapshot cache from disk:", err);
+  }
+}
+
+// Load snapshot on module initialization
+loadSnapshotFromDisk();
 
 export function getCachedSnapshot(): SnapshotCache | null {
   return snapshotCache;
+}
+
+export async function ensureSnapshotCached(): Promise<void> {
+  const epochState = await getEpochState();
+  if (!epochState.snapshot_finalized || !epochState.snapshot_merkle_root) {
+    return;
+  }
+
+  // If we already have the right snapshot cached, nothing to do
+  if (snapshotCache && snapshotCache.root === epochState.snapshot_merkle_root) {
+    return;
+  }
+
+  logger.info("Snapshot cache missing or stale, rebuilding from chain...");
+  const holders = await fetchAllCsInjHolders();
+  if (holders.length === 0) {
+    logger.warn("No csINJ holders found, cannot rebuild snapshot cache");
+    return;
+  }
+
+  const entries = buildSnapshotEntries(holders);
+  const { root } = buildMerkleTree(entries);
+
+  if (root !== epochState.snapshot_merkle_root) {
+    logger.error(
+      `Rebuilt snapshot root ${root} does not match on-chain root ${epochState.snapshot_merkle_root}. ` +
+        `Snapshot may be from a different block.`
+    );
+    return;
+  }
+
+  const totalWeight = entries[entries.length - 1].cumulative_end;
+  snapshotCache = { entries, root, totalWeight };
+  saveSnapshotToDisk();
+  logger.info(`Snapshot cache rebuilt: ${entries.length} entries, root: ${root}`);
 }
 
 export async function checkAndAdvanceEpoch(): Promise<boolean> {
