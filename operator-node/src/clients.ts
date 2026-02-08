@@ -38,6 +38,18 @@ export const stakingClient = new ChainGrpcStakingApi(endpoints.grpc);
 const authClient = new ChainGrpcAuthApi(endpoints.grpc);
 const txClient = new TxGrpcApi(endpoints.grpc);
 
+// Mutex to serialize transaction execution and prevent sequence mismatch errors
+let txMutexPromise: Promise<void> = Promise.resolve();
+
+function acquireTxMutex(): Promise<() => void> {
+  let release: () => void;
+  const prev = txMutexPromise;
+  txMutexPromise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return prev.then(() => release!);
+}
+
 export function getOperatorAddress(): string {
   return injectiveAddress;
 }
@@ -64,39 +76,44 @@ export async function executeContract(
   msg: object,
   funds?: { denom: string; amount: string }[]
 ): Promise<string> {
-  const execMsg = MsgExecuteContract.fromJSON({
-    sender: injectiveAddress,
-    contractAddress,
-    msg,
-    funds: funds || [],
-  });
+  const release = await acquireTxMutex();
+  try {
+    const execMsg = MsgExecuteContract.fromJSON({
+      sender: injectiveAddress,
+      contractAddress,
+      msg,
+      funds: funds || [],
+    });
 
-  const accountDetails = await getAccountDetails();
+    const accountDetails = await getAccountDetails();
 
-  const { signBytes, txRaw } = createTransaction({
-    message: execMsg,
-    memo: "",
-    fee: {
-      amount: [{ denom: "inj", amount: "1500000000000000" }],
-      gas: "3800000",
-    },
-    pubKey: publicKey,
-    sequence: accountDetails.sequence,
-    accountNumber: accountDetails.accountNumber,
-    chainId,
-  });
+    const { signBytes, txRaw } = createTransaction({
+      message: execMsg,
+      memo: "",
+      fee: {
+        amount: [{ denom: "inj", amount: "1500000000000000" }],
+        gas: "3800000",
+      },
+      pubKey: publicKey,
+      sequence: accountDetails.sequence,
+      accountNumber: accountDetails.accountNumber,
+      chainId,
+    });
 
-  const signature = await privateKey.sign(Buffer.from(signBytes));
-  txRaw.signatures = [signature];
+    const signature = await privateKey.sign(Buffer.from(signBytes));
+    txRaw.signatures = [signature];
 
-  const txResponse = await txClient.broadcast(txRaw);
+    const txResponse = await txClient.broadcast(txRaw);
 
-  if (txResponse.code !== 0) {
-    throw new Error(`Tx failed with code ${txResponse.code}: ${txResponse.rawLog}`);
+    if (txResponse.code !== 0) {
+      throw new Error(`Tx failed with code ${txResponse.code}: ${txResponse.rawLog}`);
+    }
+
+    logger.info(`Tx broadcast success: ${txResponse.txHash}`);
+    return txResponse.txHash;
+  } finally {
+    release();
   }
-
-  logger.info(`Tx broadcast success: ${txResponse.txHash}`);
-  return txResponse.txHash;
 }
 
 export { chainId, endpoints, injectiveAddress };
