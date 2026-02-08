@@ -1,0 +1,31 @@
+services:
+  operator-node:
+    build: .
+    container_name: chance-operator-node
+    restart: unless-stopped
+    environment:
+      # Operator wallet mnemonic (required)
+      MNEMONIC: "your mnemonic words here"
+
+      # Network: "testnet" or "mainnet"
+      NETWORK: "testnet"
+
+      # Contract addresses (required - from deploy_testnet.sh output)
+      DRAND_ORACLE_ADDRESS: "inj1..."
+      STAKING_HUB_ADDRESS: "inj1..."
+      REWARD_DISTRIBUTOR_ADDRESS: "inj1..."
+
+      # Operator loop intervals in seconds (optional)
+      DRAND_POLL_INTERVAL: "10"
+      EPOCH_CHECK_INTERVAL: "60"
+      DRAW_CHECK_INTERVAL: "30"
+
+      # Drand quicknet HTTP endpoint (optional)
+      DRAND_API_URL: "https://api.drand.sh"
+      DRAND_CHAIN_HASH: "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
+    volumes:
+      # Persist pending draw secrets across container restarts
+      - operator-data:/app/data
+
+volumes:
+  operator-data:
