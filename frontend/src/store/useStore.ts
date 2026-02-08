@@ -48,7 +48,7 @@ interface ConfettiState {
 
 export interface Toast {
     id: number;
-    type: 'success' | 'info' | 'warning';
+    type: "success" | "info" | "warning";
     title: string;
     message: string;
 }
@@ -72,7 +72,15 @@ interface DrawsState {
 }
 
 interface AppState
-    extends WalletState, BalanceState, ContractState, UserState, DrawsState, ToastState, NavigationState, ConfettiState {
+    extends
+        WalletState,
+        BalanceState,
+        ContractState,
+        UserState,
+        DrawsState,
+        ToastState,
+        NavigationState,
+        ConfettiState {
     isLoading: boolean;
     error: string;
 
@@ -87,7 +95,7 @@ interface AppState
     fetchDraws: () => Promise<void>;
 
     // Toast actions
-    addToast: (toast: Omit<Toast, 'id'>) => void;
+    addToast: (toast: Omit<Toast, "id">) => void;
     removeToast: (id: number) => void;
 
     // Navigation actions
@@ -274,8 +282,7 @@ export const useStore = create<AppState>()(
                             drawState.total_rewards_distributed,
                         currentEpoch: epochState.current_epoch,
                         epochStartTime: epochState.epoch_start_time,
-                        epochDurationSeconds:
-                            hubConfig.epoch_duration_seconds,
+                        epochDurationSeconds: hubConfig.epoch_duration_seconds,
                         snapshotTotalWeight:
                             epochState.snapshot_total_weight || "0",
                         snapshotNumHolders:
@@ -349,8 +356,7 @@ export const useStore = create<AppState>()(
                         );
                         // Detect newly revealed draws (only after initial load)
                         if (prevDraws.length > 0) {
-                            const connectedAddr =
-                                get().injectiveAddress;
+                            const connectedAddr = get().injectiveAddress;
                             for (const draw of draws) {
                                 if (
                                     draw.status === "revealed" &&
@@ -360,8 +366,9 @@ export const useStore = create<AppState>()(
                                         draw.draw_type === "big"
                                             ? "Big Jackpot"
                                             : "Regular Draw";
-                                    const rewardFormatted =
-                                        formatInjString(draw.reward_amount);
+                                    const rewardFormatted = formatInjString(
+                                        draw.reward_amount,
+                                    );
                                     // Check if the connected user won
                                     const userWon =
                                         connectedAddr &&
