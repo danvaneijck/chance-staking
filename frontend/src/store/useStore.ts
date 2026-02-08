@@ -246,9 +246,12 @@ export const useStore = create<AppState>()(
             fetchDraws: async () => {
                 if (!CONTRACTS.rewardDistributor) return;
                 try {
+                    const drawState = await contracts.fetchDrawState();
+                    const count = 20;
+                    const startAfter = Math.max(0, drawState.next_draw_id - count - 1);
                     const { draws } = await contracts.fetchDrawHistory(
-                        undefined,
-                        20,
+                        startAfter > 0 ? startAfter : undefined,
+                        count,
                     );
                     if (draws) {
                         set({ recentDraws: draws });
