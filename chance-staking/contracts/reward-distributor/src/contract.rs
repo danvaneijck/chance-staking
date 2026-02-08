@@ -29,8 +29,6 @@ pub fn instantiate(
         staking_hub: deps.api.addr_validate(&msg.staking_hub)?,
         drand_oracle: deps.api.addr_validate(&msg.drand_oracle)?,
         reveal_deadline_seconds: msg.reveal_deadline_seconds,
-        regular_draw_reward: msg.regular_draw_reward,
-        big_draw_reward: msg.big_draw_reward,
     };
     CONFIG.save(deps.storage, &config)?;
 
@@ -116,8 +114,6 @@ pub fn execute(
             operator,
             staking_hub,
             reveal_deadline_seconds,
-            regular_draw_reward,
-            big_draw_reward,
         } => execute::update_config(
             deps,
             env,
@@ -126,8 +122,6 @@ pub fn execute(
                 operator,
                 staking_hub,
                 reveal_deadline_seconds,
-                regular_draw_reward,
-                big_draw_reward,
             },
         ),
     }
@@ -188,8 +182,6 @@ mod tests {
             staking_hub: mock_api.addr_make("staking_hub").to_string(),
             drand_oracle: mock_api.addr_make("drand_oracle").to_string(),
             reveal_deadline_seconds: 3600,
-            regular_draw_reward: Uint128::from(10_000_000u128),
-            big_draw_reward: Uint128::from(100_000_000u128),
         }
     }
 

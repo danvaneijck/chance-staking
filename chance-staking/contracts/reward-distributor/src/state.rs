@@ -23,10 +23,6 @@ pub struct DistributorConfig {
     pub drand_oracle: Addr,
     /// How long the operator has to reveal after committing (seconds)
     pub reveal_deadline_seconds: u64,
-    /// Reward amount per regular draw (in uINJ)
-    pub regular_draw_reward: Uint128,
-    /// Reward amount per big draw (in uINJ)
-    pub big_draw_reward: Uint128,
 }
 
 #[cw_serde]

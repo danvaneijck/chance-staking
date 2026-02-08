@@ -4,8 +4,6 @@
 # Changes vs production deploy:
 #   - EPOCH_DURATION_SECONDS:    86400 -> 120  (2 minutes)
 #   - REVEAL_DEADLINE_SECONDS:   3600  -> 300  (5 minutes)
-#   - REGULAR_DRAW_REWARD:       10M   -> 1M   (lower threshold)
-#   - BIG_DRAW_REWARD:           100M  -> 5M   (lower threshold)
 #
 # Also set these in your operator-node .env for faster loops:
 #   EPOCH_CHECK_INTERVAL=15
@@ -55,8 +53,6 @@ QUICKNET_PERIOD_SECONDS=3
 
 # -- Reward distributor config (FAST TEST) --
 REVEAL_DEADLINE_SECONDS=300
-REGULAR_DRAW_REWARD="1000000"
-BIG_DRAW_REWARD="5000000"
 
 # -- Staking hub config (FAST TEST) --
 EPOCH_DURATION_SECONDS=120
@@ -277,9 +273,7 @@ DISTRIBUTOR_INIT_MSG=$(cat <<EOF
   "operator": "$OPERATOR_ADDRESS",
   "staking_hub": "$ADMIN_ADDRESS",
   "drand_oracle": "$DRAND_ORACLE_ADDRESS",
-  "reveal_deadline_seconds": $REVEAL_DEADLINE_SECONDS,
-  "regular_draw_reward": "$REGULAR_DRAW_REWARD",
-  "big_draw_reward": "$BIG_DRAW_REWARD"
+  "reveal_deadline_seconds": $REVEAL_DEADLINE_SECONDS
 }
 EOF
 )

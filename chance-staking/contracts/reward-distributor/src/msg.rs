@@ -10,8 +10,6 @@ pub struct InstantiateMsg {
     pub staking_hub: String,
     pub drand_oracle: String,
     pub reveal_deadline_seconds: u64,
-    pub regular_draw_reward: Uint128,
-    pub big_draw_reward: Uint128,
 }
 
 #[cw_serde]
@@ -57,8 +55,6 @@ pub enum ExecuteMsg {
         operator: Option<String>,
         staking_hub: Option<String>,
         reveal_deadline_seconds: Option<u64>,
-        regular_draw_reward: Option<Uint128>,
-        big_draw_reward: Option<Uint128>,
     },
 }
 
@@ -151,6 +147,4 @@ pub struct UpdateConfigParams {
     pub operator: Option<String>,
     pub staking_hub: Option<String>,
     pub reveal_deadline_seconds: Option<u64>,
-    pub regular_draw_reward: Option<Uint128>,
-    pub big_draw_reward: Option<Uint128>,
 }

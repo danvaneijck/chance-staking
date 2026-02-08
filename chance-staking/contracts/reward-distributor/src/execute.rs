@@ -479,8 +479,6 @@ pub fn update_config(
         operator,
         staking_hub,
         reveal_deadline_seconds,
-        regular_draw_reward,
-        big_draw_reward,
     } = params;
 
     let mut config = CONFIG.load(deps.storage)?;
@@ -499,12 +497,6 @@ pub fn update_config(
     }
     if let Some(deadline) = reveal_deadline_seconds {
         config.reveal_deadline_seconds = deadline;
-    }
-    if let Some(reward) = regular_draw_reward {
-        config.regular_draw_reward = reward;
-    }
-    if let Some(reward) = big_draw_reward {
-        config.big_draw_reward = reward;
     }
 
     CONFIG.save(deps.storage, &config)?;

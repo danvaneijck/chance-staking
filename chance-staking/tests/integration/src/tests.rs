@@ -101,8 +101,6 @@ fn distributor_instantiate_msg() -> chance_reward_distributor::msg::InstantiateM
         staking_hub: mock_api.addr_make("staking_hub").to_string(),
         drand_oracle: mock_api.addr_make("drand_oracle").to_string(),
         reveal_deadline_seconds: 3600,
-        regular_draw_reward: Uint128::from(10_000_000u128),
-        big_draw_reward: Uint128::from(100_000_000u128),
     }
 }
 
