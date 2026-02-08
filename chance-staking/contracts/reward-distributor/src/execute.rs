@@ -10,7 +10,7 @@ use crate::error::ContractError;
 use crate::msg::OracleQueryMsg;
 use crate::state::{
     Draw, Snapshot, CONFIG, DRAWS, DRAW_STATE, SNAPSHOTS, USER_TOTAL_WON,
-    USER_WINS,
+    USER_WINS, USER_WIN_COUNT,
 };
 
 /// Fund the regular draw pool. Only staking hub can call.
@@ -366,12 +366,12 @@ pub fn reveal_draw(
     state.total_rewards_distributed += draw.reward_amount;
     DRAW_STATE.save(deps.storage, &state)?;
 
-    // 10. Update per-user win tracking
-    let mut user_draw_ids = USER_WINS
+    // 10. Update per-user win tracking (O(1) write per win, no unbounded Vec)
+    USER_WINS.save(deps.storage, (&winner_addr, draw_id), &())?;
+    let win_count = USER_WIN_COUNT
         .may_load(deps.storage, &winner_addr)?
-        .unwrap_or_default();
-    user_draw_ids.push(draw_id);
-    USER_WINS.save(deps.storage, &winner_addr, &user_draw_ids)?;
+        .unwrap_or(0);
+    USER_WIN_COUNT.save(deps.storage, &winner_addr, &(win_count + 1))?;
 
     let user_total = USER_TOTAL_WON
         .may_load(deps.storage, &winner_addr)?

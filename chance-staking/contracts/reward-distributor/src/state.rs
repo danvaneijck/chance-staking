@@ -8,8 +8,11 @@ pub const DRAW_STATE: Item<DrawStateInfo> = Item::new("draw_state");
 pub const DRAWS: Map<u64, Draw> = Map::new("draws");
 pub const SNAPSHOTS: Map<u64, Snapshot> = Map::new("snapshots");
 
-/// Per-user win tracking
-pub const USER_WINS: Map<&Addr, Vec<u64>> = Map::new("user_wins");
+/// Per-user win tracking.
+/// Each entry is keyed by (user_addr, draw_id) for O(1) writes instead of
+/// loading/saving an unbounded Vec on every reveal_draw().
+pub const USER_WINS: Map<(&Addr, u64), ()> = Map::new("user_wins_v2");
+pub const USER_WIN_COUNT: Map<&Addr, u32> = Map::new("user_win_count");
 pub const USER_TOTAL_WON: Map<&Addr, Uint128> = Map::new("user_total_won");
 
 #[cw_serde]

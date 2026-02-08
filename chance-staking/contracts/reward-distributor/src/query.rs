@@ -3,7 +3,7 @@ use cosmwasm_std::{to_json_binary, Binary, Deps, Order, StdResult, Uint128};
 use cw_storage_plus::Bound;
 
 use crate::state::{
-    CONFIG, DRAWS, DRAW_STATE, SNAPSHOTS, USER_TOTAL_WON, USER_WINS,
+    CONFIG, DRAWS, DRAW_STATE, SNAPSHOTS, USER_TOTAL_WON, USER_WINS, USER_WIN_COUNT,
 };
 use crate::msg::{DrawHistoryResponse, PoolBalancesResponse, UserWinsResponse};
 
@@ -48,18 +48,34 @@ pub fn query_pool_balances(deps: Deps) -> StdResult<Binary> {
     })
 }
 
-pub fn query_user_wins(deps: Deps, address: String) -> StdResult<Binary> {
+pub fn query_user_wins(
+    deps: Deps,
+    address: String,
+    start_after: Option<u64>,
+    limit: Option<u32>,
+) -> StdResult<Binary> {
     let addr = deps.api.addr_validate(&address)?;
-    let draw_ids = USER_WINS
+    let limit = limit.unwrap_or(100).min(100) as usize;
+    let start = start_after.map(Bound::exclusive);
+
+    let draw_ids: Vec<u64> = USER_WINS
+        .prefix(&addr)
+        .range(deps.storage, start, None, Order::Ascending)
+        .take(limit)
+        .filter_map(|r| r.ok())
+        .map(|(draw_id, _)| draw_id)
+        .collect();
+
+    let total_wins = USER_WIN_COUNT
         .may_load(deps.storage, &addr)?
-        .unwrap_or_default();
+        .unwrap_or(0);
     let total_won = USER_TOTAL_WON
         .may_load(deps.storage, &addr)?
         .unwrap_or(Uint128::zero());
 
     to_json_binary(&UserWinsResponse {
         address,
-        total_wins: draw_ids.len() as u32,
+        total_wins,
         total_won_amount: total_won,
         draw_ids,
     })
@@ -72,24 +88,16 @@ pub fn query_user_win_details(
     limit: Option<u32>,
 ) -> StdResult<Binary> {
     let addr = deps.api.addr_validate(&address)?;
-    let draw_ids = USER_WINS
-        .may_load(deps.storage, &addr)?
-        .unwrap_or_default();
-
     let limit = limit.unwrap_or(20).min(100) as usize;
+    let start = start_after.map(Bound::exclusive);
 
-    let mut draws = Vec::new();
-    let filtered_ids: Vec<u64> = if let Some(start) = start_after {
-        draw_ids.into_iter().filter(|id| *id > start).collect()
-    } else {
-        draw_ids
-    };
-
-    for id in filtered_ids.into_iter().take(limit) {
-        if let Ok(draw) = DRAWS.load(deps.storage, id) {
-            draws.push(draw);
-        }
-    }
+    let draws: Vec<_> = USER_WINS
+        .prefix(&addr)
+        .range(deps.storage, start, None, Order::Ascending)
+        .take(limit)
+        .filter_map(|r| r.ok())
+        .filter_map(|(draw_id, _)| DRAWS.load(deps.storage, draw_id).ok())
+        .collect();
 
     to_json_binary(&draws)
 }

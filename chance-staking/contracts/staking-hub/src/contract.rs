@@ -9,7 +9,8 @@ use crate::execute;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::query;
 use crate::state::{
-    Config, EpochState, CONFIG, EPOCH_STATE, EXCHANGE_RATE, TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING,
+    Config, EpochState, CONFIG, EPOCH_STATE, EXCHANGE_RATE, PENDING_UNSTAKE_TOTAL,
+    TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING,
 };
 
 const CONTRACT_NAME: &str = "crates.io:chance-staking-hub";
@@ -63,6 +64,7 @@ pub fn instantiate(
     EXCHANGE_RATE.save(deps.storage, &Decimal::one())?;
     TOTAL_INJ_BACKING.save(deps.storage, &Uint128::zero())?;
     TOTAL_CSINJ_SUPPLY.save(deps.storage, &Uint128::zero())?;
+    PENDING_UNSTAKE_TOTAL.save(deps.storage, &Uint128::zero())?;
 
     // Initialize epoch state
     let epoch_state = EpochState {
@@ -123,7 +125,11 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Config {} => query::query_config(deps),
         QueryMsg::EpochState {} => query::query_epoch_state(deps),
         QueryMsg::ExchangeRate {} => query::query_exchange_rate(deps),
-        QueryMsg::UnstakeRequests { address } => query::query_unstake_requests(deps, address),
+        QueryMsg::UnstakeRequests {
+            address,
+            start_after,
+            limit,
+        } => query::query_unstake_requests(deps, address, start_after, limit),
     }
 }
 

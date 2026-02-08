@@ -1,8 +1,9 @@
-use cosmwasm_std::{to_json_binary, Binary, Deps, StdResult};
+use cosmwasm_std::{to_json_binary, Binary, Deps, Order, StdResult};
+use cw_storage_plus::Bound;
 
 use crate::msg::{ExchangeRateResponse, UnstakeRequestEntry};
 use crate::state::{
-    CONFIG, EPOCH_STATE, EXCHANGE_RATE, NEXT_UNSTAKE_ID, TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING,
+    CONFIG, EPOCH_STATE, EXCHANGE_RATE, TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING,
     UNSTAKE_REQUESTS,
 };
 
@@ -28,18 +29,23 @@ pub fn query_exchange_rate(deps: Deps) -> StdResult<Binary> {
     })
 }
 
-pub fn query_unstake_requests(deps: Deps, address: String) -> StdResult<Binary> {
+pub fn query_unstake_requests(
+    deps: Deps,
+    address: String,
+    start_after: Option<u64>,
+    limit: Option<u32>,
+) -> StdResult<Binary> {
     let addr = deps.api.addr_validate(&address)?;
-    let next_id = NEXT_UNSTAKE_ID
-        .may_load(deps.storage, &addr)?
-        .unwrap_or(0);
+    let limit = limit.unwrap_or(50).min(100) as usize;
+    let start = start_after.map(Bound::exclusive);
 
-    let mut entries = Vec::new();
-    for id in 0..next_id {
-        if let Some(request) = UNSTAKE_REQUESTS.may_load(deps.storage, (&addr, id))? {
-            entries.push(UnstakeRequestEntry { id, request });
-        }
-    }
+    let entries: Vec<UnstakeRequestEntry> = UNSTAKE_REQUESTS
+        .prefix(&addr)
+        .range(deps.storage, start, None, Order::Ascending)
+        .take(limit)
+        .filter_map(|r| r.ok())
+        .map(|(id, request)| UnstakeRequestEntry { id, request })
+        .collect();
 
     to_json_binary(&entries)
 }

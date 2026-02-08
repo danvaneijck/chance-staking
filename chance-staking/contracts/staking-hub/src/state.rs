@@ -9,6 +9,10 @@ pub const TOTAL_INJ_BACKING: Item<Uint128> = Item::new("inj_backing");
 pub const TOTAL_CSINJ_SUPPLY: Item<Uint128> = Item::new("csinj_supply");
 pub const UNSTAKE_REQUESTS: Map<(&Addr, u64), UnstakeRequest> = Map::new("unstake_reqs");
 pub const NEXT_UNSTAKE_ID: Map<&Addr, u64> = Map::new("next_unstake_id");
+/// Running total of all unclaimed unstake request INJ amounts.
+/// Updated on unstake (increment) and claim_unstaked (decrement) to avoid
+/// iterating all requests on every distribute_rewards() call.
+pub const PENDING_UNSTAKE_TOTAL: Item<Uint128> = Item::new("pending_unstake");
 
 #[cw_serde]
 pub struct Config {
