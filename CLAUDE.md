@@ -22,7 +22,7 @@ chance-staking/
 
 ```bash
 cd chance-staking
-cargo test                                    # all 47 tests
+cargo test                                    # all 51 tests
 cargo test -p chance-drand-oracle             # oracle unit tests
 cargo test -p chance-staking-hub              # staking hub unit tests
 cargo test -p chance-reward-distributor       # distributor unit tests
@@ -251,11 +251,11 @@ Manages prize draw lifecycle: commit-reveal with drand randomness, merkle-proof 
 } }
 
 // Commit to a draw (operator only)
+// Contract uses full pool balance as reward amount
 { "commit_draw": {
     "draw_type": "regular",          // "regular" | "big"
     "operator_commit": "sha256hex",  // hex(sha256(secret))
     "target_drand_round": 1000,
-    "reward_amount": "10000000",
     "epoch": 1
 } }
 
@@ -277,8 +277,8 @@ Manages prize draw lifecycle: commit-reveal with drand randomness, merkle-proof 
     "operator": "inj1...",               // optional
     "staking_hub": "inj1...",            // optional
     "reveal_deadline_seconds": 3600,     // optional
-    "regular_draw_reward": "10000000",   // optional
-    "big_draw_reward": "100000000"       // optional
+    "epochs_between_regular": 1,         // optional
+    "epochs_between_big": 7              // optional
 } }
 ```
 
@@ -294,8 +294,8 @@ Manages prize draw lifecycle: commit-reveal with drand randomness, merkle-proof 
 //   "staking_hub": "inj1...",
 //   "drand_oracle": "inj1...",
 //   "reveal_deadline_seconds": 3600,
-//   "regular_draw_reward": "10000000",
-//   "big_draw_reward": "100000000"
+//   "epochs_between_regular": 1,
+//   "epochs_between_big": 7
 // }
 
 // Get global draw state (pool balances, counters)
@@ -306,7 +306,9 @@ Manages prize draw lifecycle: commit-reveal with drand randomness, merkle-proof 
 //   "regular_pool_balance": "40000000",
 //   "big_pool_balance": "200000000",
 //   "total_draws_completed": 4,
-//   "total_rewards_distributed": "40000000"
+//   "total_rewards_distributed": "40000000",
+//   "last_regular_draw_epoch": 4 | null,
+//   "last_big_draw_epoch": 1 | null
 // }
 
 // Get a specific draw

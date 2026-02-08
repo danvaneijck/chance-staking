@@ -45,6 +45,8 @@ export interface DrawStateInfo {
     big_pool_balance: string;
     total_draws_completed: number;
     total_rewards_distributed: string;
+    last_regular_draw_epoch: number | null;
+    last_big_draw_epoch: number | null;
 }
 
 export interface Draw {

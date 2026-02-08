@@ -154,8 +154,8 @@ injectived tx wasm instantiate <code_id> '{
   "staking_hub": "<hub_addr_placeholder>",
   "drand_oracle": "<oracle_addr>",
   "reveal_deadline_seconds": 3600,
-  "regular_draw_reward": "10000000",
-  "big_draw_reward": "100000000"
+  "epochs_between_regular": 1,
+  "epochs_between_big": 7
 }' --label "chance-reward-distributor" --from <key> --admin <admin_addr> \
   --gas auto --gas-adjustment 1.3 \
   --node https://sentry.tm.injective.network:443 \
