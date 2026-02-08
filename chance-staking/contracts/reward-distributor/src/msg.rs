@@ -126,3 +126,31 @@ pub struct UserWinsResponse {
     pub total_won_amount: Uint128,
     pub draw_ids: Vec<u64>,
 }
+
+/// Parameters for commit_draw execute call (avoids too_many_arguments).
+pub struct CommitDrawParams {
+    pub draw_type: DrawType,
+    pub operator_commit: String,
+    pub target_drand_round: u64,
+    pub reward_amount: Uint128,
+    pub epoch: u64,
+}
+
+/// Parameters for reveal_draw execute call (avoids too_many_arguments).
+pub struct RevealDrawParams {
+    pub draw_id: u64,
+    pub operator_secret_hex: String,
+    pub winner_address: String,
+    pub winner_cumulative_start: Uint128,
+    pub winner_cumulative_end: Uint128,
+    pub merkle_proof: Vec<String>,
+}
+
+/// Parameters for update_config execute call (avoids too_many_arguments).
+pub struct UpdateConfigParams {
+    pub operator: Option<String>,
+    pub staking_hub: Option<String>,
+    pub reveal_deadline_seconds: Option<u64>,
+    pub regular_draw_reward: Option<Uint128>,
+    pub big_draw_reward: Option<Uint128>,
+}
