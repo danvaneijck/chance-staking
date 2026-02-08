@@ -1,23 +1,11 @@
 import { config } from "./config";
 import { logger } from "./utils/logger";
 import { getOperatorAddress } from "./clients";
-import { syncDrandBeacons } from "./services/drand";
 import { checkAndAdvanceEpoch, getEpochState, ensureSnapshotCached } from "./services/epoch";
 import { checkAndCommitDraws, checkAndRevealDraws, getDrawState } from "./services/draw";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function runDrandLoop(): Promise<void> {
-  while (true) {
-    try {
-      await syncDrandBeacons();
-    } catch (err) {
-      logger.error("Drand sync error:", err);
-    }
-    await sleep(config.intervals.drandPollSeconds * 1000);
-  }
 }
 
 async function runEpochLoop(): Promise<void> {
@@ -79,7 +67,7 @@ async function main(): Promise<void> {
 
   // Run all loops concurrently
   logger.info("Starting operator loops...");
-  await Promise.all([runDrandLoop(), runEpochLoop(), runDrawLoop()]);
+  await Promise.all([runEpochLoop(), runDrawLoop()]);
 }
 
 main().catch((err) => {

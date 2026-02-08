@@ -7,7 +7,7 @@ import { generateSecret, computeOperatorCommit, computeWinningTicket } from "../
 import { generateProof, findWinnerIndex, SnapshotEntry } from "./merkle";
 import { computeLeafHash } from "../utils/crypto";
 import { getCachedSnapshot, getEpochState } from "./epoch";
-import { fetchLatestDrandRound, submitSpecificRound, getStoredBeacon, getLatestStoredRound } from "./drand";
+import { fetchLatestDrandRound, submitSpecificRound, getStoredBeacon } from "./drand";
 
 interface DrawStateInfo {
   next_draw_id: number;
@@ -289,18 +289,17 @@ export async function checkAndRevealDraws(): Promise<void> {
       continue;
     }
 
-    // Check if drand has progressed past the target round.
-    // We check the latest stored round rather than the specific target round,
-    // because syncDrandBeacons only submits the latest round and may skip
-    // the exact target. revealDraw handles submitting the specific round.
+    // Check if the drand network has produced the target round yet.
+    // We query the drand HTTP API (free) instead of the on-chain oracle.
+    // revealDraw handles submitting the specific beacon on-chain.
     try {
-      const latestStored = await getLatestStoredRound();
-      if (latestStored >= draw.target_drand_round) {
-        logger.info(`Drand has reached round ${latestStored} (target: ${draw.target_drand_round}), revealing draw ${draw.id}`);
+      const latestDrand = await fetchLatestDrandRound();
+      if (latestDrand.round >= draw.target_drand_round) {
+        logger.info(`Drand at round ${latestDrand.round} (target: ${draw.target_drand_round}), revealing draw ${draw.id}`);
         await revealDraw(draw.id);
       } else {
         logger.debug(
-          `Waiting for drand round ${draw.target_drand_round} for draw ${draw.id} (latest stored: ${latestStored})`
+          `Waiting for drand round ${draw.target_drand_round} for draw ${draw.id} (drand latest: ${latestDrand.round})`
         );
       }
     } catch (err) {
