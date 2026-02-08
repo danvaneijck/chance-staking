@@ -44,11 +44,11 @@ function smallNumberWithZeroCount(
     }
 
     const abs = Math.abs(value);
-    const zeroRun = Math.floor(-Math.log10(abs)) - 1;
-    const precision = zeroRun + 1 + digits + 2; // enough room for significant digits
-    const fixed = abs.toFixed(precision).replace(/0+$/, "").replace(/\.$/, "");
+    const precision = Math.ceil(-Math.log10(abs)) + digits + 2;
+    const fixed = abs.toFixed(Math.min(precision, 100)).replace(/0+$/, "").replace(/\.$/, "");
     const [, frac = ""] = fixed.split(".");
-    const sig = frac.slice(zeroRun + 1); // skip the leading zeros (already shown via subscript)
+    const zeroRun = frac.match(/^0*/)?.[0].length ?? 0;
+    const sig = frac.slice(zeroRun);
 
     return (
         <span className="inline-flex items-baseline">
