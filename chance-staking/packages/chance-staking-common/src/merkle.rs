@@ -22,11 +22,7 @@ pub fn compute_leaf_hash(address: &str, cumulative_start: u128, cumulative_end: 
 /// All values are 32-byte hashes represented as hex strings.
 ///
 /// Returns true if the computed root matches the expected root.
-pub fn verify_merkle_proof(
-    root_hex: &str,
-    proof_hex: &[String],
-    leaf_hash: &[u8; 32],
-) -> bool {
+pub fn verify_merkle_proof(root_hex: &str, proof_hex: &[String], leaf_hash: &[u8; 32]) -> bool {
     let expected_root = match hex::decode(root_hex) {
         Ok(v) => v,
         Err(_) => return false,

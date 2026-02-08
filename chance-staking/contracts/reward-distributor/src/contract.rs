@@ -64,7 +64,15 @@ pub fn execute(
             merkle_root,
             total_weight,
             num_holders,
-        } => execute::set_snapshot(deps, env, info, epoch, merkle_root, total_weight, num_holders),
+        } => execute::set_snapshot(
+            deps,
+            env,
+            info,
+            epoch,
+            merkle_root,
+            total_weight,
+            num_holders,
+        ),
         ExecuteMsg::CommitDraw {
             draw_type,
             operator_commit,
@@ -167,7 +175,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 mod tests {
     use super::*;
     use chance_staking_common::types::{DrawStatus, DrawType};
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, message_info, MockApi};
+    use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env, MockApi};
     use cosmwasm_std::{coins, Timestamp};
     use sha2::{Digest, Sha256};
 
@@ -255,13 +263,7 @@ mod tests {
 
         let staking_hub = deps.api.addr_make("staking_hub");
         let info = message_info(&staking_hub, &coins(100_000_000, "inj"));
-        execute(
-            deps.as_mut(),
-            mock_env(),
-            info,
-            ExecuteMsg::FundBigPool {},
-        )
-        .unwrap();
+        execute(deps.as_mut(), mock_env(), info, ExecuteMsg::FundBigPool {}).unwrap();
 
         let state = DRAW_STATE.load(deps.as_ref().storage).unwrap();
         assert_eq!(state.big_pool_balance, Uint128::from(100_000_000u128));
@@ -483,7 +485,13 @@ mod tests {
 
         let anyone = deps.api.addr_make("anyone");
         let info = message_info(&anyone, &[]);
-        execute(deps.as_mut(), env, info, ExecuteMsg::ExpireDraw { draw_id: 0 }).unwrap();
+        execute(
+            deps.as_mut(),
+            env,
+            info,
+            ExecuteMsg::ExpireDraw { draw_id: 0 },
+        )
+        .unwrap();
 
         let draw = DRAWS.load(deps.as_ref().storage, 0).unwrap();
         assert_eq!(draw.status, DrawStatus::Expired);

@@ -107,7 +107,15 @@ pub fn execute(
             total_weight,
             num_holders,
             snapshot_uri,
-        } => execute::take_snapshot(deps, env, info, merkle_root, total_weight, num_holders, snapshot_uri),
+        } => execute::take_snapshot(
+            deps,
+            env,
+            info,
+            merkle_root,
+            total_weight,
+            num_holders,
+            snapshot_uri,
+        ),
         ExecuteMsg::UpdateConfig {
             admin,
             operator,
@@ -138,8 +146,8 @@ mod tests {
     use crate::state::UNSTAKE_REQUESTS;
 
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, message_info, MockApi};
-    use cosmwasm_std::{Coin, Timestamp, coins};
+    use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env, MockApi};
+    use cosmwasm_std::{coins, Coin, Timestamp};
 
     fn default_instantiate_msg() -> InstantiateMsg {
         let mock_api = MockApi::default();
@@ -388,13 +396,8 @@ mod tests {
 
         let random_user = deps.api.addr_make("random_user");
         let info = message_info(&random_user, &[]);
-        let err = execute(
-            deps.as_mut(),
-            mock_env(),
-            info,
-            ExecuteMsg::ClaimRewards {},
-        )
-        .unwrap_err();
+        let err =
+            execute(deps.as_mut(), mock_env(), info, ExecuteMsg::ClaimRewards {}).unwrap_err();
         assert!(matches!(err, ContractError::Unauthorized { .. }));
     }
 
@@ -405,22 +408,13 @@ mod tests {
 
         let operator = deps.api.addr_make("operator");
         let info = message_info(&operator, &[]);
-        let res = execute(
-            deps.as_mut(),
-            mock_env(),
-            info,
-            ExecuteMsg::ClaimRewards {},
-        )
-        .unwrap();
+        let res = execute(deps.as_mut(), mock_env(), info, ExecuteMsg::ClaimRewards {}).unwrap();
 
         // Should have: 1 SetWithdrawAddress + 2 WithdrawDelegatorReward (one per validator)
         assert_eq!(res.messages.len(), 3);
 
         // Check event
-        assert!(res
-            .events
-            .iter()
-            .any(|e| e.ty == "chance_rewards_claimed"));
+        assert!(res.events.iter().any(|e| e.ty == "chance_rewards_claimed"));
     }
 
     #[test]
@@ -443,13 +437,7 @@ mod tests {
         // Distribute rewards (step 2)
         let operator = deps.api.addr_make("operator");
         let info = message_info(&operator, &[]);
-        let res = execute(
-            deps.as_mut(),
-            env,
-            info,
-            ExecuteMsg::DistributeRewards {},
-        )
-        .unwrap();
+        let res = execute(deps.as_mut(), env, info, ExecuteMsg::DistributeRewards {}).unwrap();
 
         // Should have messages: fund regular pool, fund big pool, treasury send
         assert!(res.messages.len() >= 3);
@@ -464,10 +452,7 @@ mod tests {
         assert!(rate > Decimal::one());
 
         // Check event
-        assert!(res
-            .events
-            .iter()
-            .any(|e| e.ty == "chance_epoch_advanced"));
+        assert!(res.events.iter().any(|e| e.ty == "chance_epoch_advanced"));
     }
 
     #[test]
@@ -572,7 +557,10 @@ mod tests {
         .unwrap();
 
         let config = CONFIG.load(deps.as_ref().storage).unwrap();
-        assert_eq!(config.validators, vec!["val2".to_string(), "val3".to_string()]);
+        assert_eq!(
+            config.validators,
+            vec!["val2".to_string(), "val3".to_string()]
+        );
     }
 
     #[test]
@@ -612,11 +600,7 @@ mod tests {
             Coin::new(1_000_000u128, "inj"),
             vec![],
         );
-        deps.querier.staking.update(
-            "inj",
-            &[],
-            &[delegation],
-        );
+        deps.querier.staking.update("inj", &[], &[delegation]);
 
         let admin = deps.api.addr_make("admin");
         let info = message_info(&admin, &[]);
@@ -636,7 +620,10 @@ mod tests {
 
         // Check validators updated
         let config = CONFIG.load(deps.as_ref().storage).unwrap();
-        assert_eq!(config.validators, vec!["val2".to_string(), "val3".to_string()]);
+        assert_eq!(
+            config.validators,
+            vec!["val2".to_string(), "val3".to_string()]
+        );
 
         // Check event
         assert!(res

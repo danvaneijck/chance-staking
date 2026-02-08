@@ -2,10 +2,10 @@ use chance_staking_common::merkle::{compute_leaf_hash, verify_merkle_proof};
 use cosmwasm_std::{to_json_binary, Binary, Deps, Order, StdResult, Uint128};
 use cw_storage_plus::Bound;
 
+use crate::msg::{DrawHistoryResponse, PoolBalancesResponse, UserWinsResponse};
 use crate::state::{
     CONFIG, DRAWS, DRAW_STATE, SNAPSHOTS, USER_TOTAL_WON, USER_WINS, USER_WIN_COUNT,
 };
-use crate::msg::{DrawHistoryResponse, PoolBalancesResponse, UserWinsResponse};
 
 pub fn query_config(deps: Deps) -> StdResult<Binary> {
     let config = CONFIG.load(deps.storage)?;
@@ -66,9 +66,7 @@ pub fn query_user_wins(
         .map(|(draw_id, _)| draw_id)
         .collect();
 
-    let total_wins = USER_WIN_COUNT
-        .may_load(deps.storage, &addr)?
-        .unwrap_or(0);
+    let total_wins = USER_WIN_COUNT.may_load(deps.storage, &addr)?.unwrap_or(0);
     let total_won = USER_TOTAL_WON
         .may_load(deps.storage, &addr)?
         .unwrap_or(Uint128::zero());

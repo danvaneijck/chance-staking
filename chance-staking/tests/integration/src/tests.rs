@@ -52,16 +52,13 @@ fn oracle_instantiate_msg(operator: &str) -> chance_drand_oracle::msg::Instantia
     chance_drand_oracle::msg::InstantiateMsg {
         operators: vec![operator.to_string()],
         quicknet_pubkey_hex: QUICKNET_PK_HEX.to_string(),
-        chain_hash: "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971"
-            .to_string(),
+        chain_hash: "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971".to_string(),
         genesis_time: 1692803367,
         period_seconds: 3,
     }
 }
 
-fn setup_oracle(
-    deps: &mut OwnedDeps<cosmwasm_std::MemoryStorage, MockApi, MockQuerier>,
-) {
+fn setup_oracle(deps: &mut OwnedDeps<cosmwasm_std::MemoryStorage, MockApi, MockQuerier>) {
     let admin = deps.api.addr_make("admin");
     let operator = deps.api.addr_make("operator");
     let msg = oracle_instantiate_msg(&operator.to_string());
@@ -88,9 +85,7 @@ fn hub_instantiate_msg() -> chance_staking_hub::msg::InstantiateMsg {
     }
 }
 
-fn setup_hub(
-    deps: &mut OwnedDeps<cosmwasm_std::MemoryStorage, MockApi, MockQuerier>,
-) {
+fn setup_hub(deps: &mut OwnedDeps<cosmwasm_std::MemoryStorage, MockApi, MockQuerier>) {
     let admin = deps.api.addr_make("admin");
     let msg = hub_instantiate_msg();
     let info = message_info(&admin, &[]);
@@ -111,9 +106,7 @@ fn distributor_instantiate_msg() -> chance_reward_distributor::msg::InstantiateM
     }
 }
 
-fn setup_distributor(
-    deps: &mut OwnedDeps<cosmwasm_std::MemoryStorage, MockApi, MockQuerier>,
-) {
+fn setup_distributor(deps: &mut OwnedDeps<cosmwasm_std::MemoryStorage, MockApi, MockQuerier>) {
     let admin = deps.api.addr_make("admin");
     let msg = distributor_instantiate_msg();
     let info = message_info(&admin, &[]);
@@ -140,9 +133,8 @@ fn test_drand_beacon_verification() {
         signature_hex: TEST_SIG_HEX.to_string(),
     };
     let info = message_info(&operator, &[]);
-    let res =
-        chance_drand_oracle::contract::execute(deps.as_mut(), mock_env(), info, submit_msg)
-            .unwrap();
+    let res = chance_drand_oracle::contract::execute(deps.as_mut(), mock_env(), info, submit_msg)
+        .unwrap();
 
     // Verify response attributes
     assert_eq!(res.attributes[0].value, "submit_beacon");
@@ -171,9 +163,8 @@ fn test_drand_beacon_verification() {
     };
     let operator = deps.api.addr_make("operator");
     let info = message_info(&operator, &[]);
-    let err =
-        chance_drand_oracle::contract::execute(deps.as_mut(), mock_env(), info, bad_msg)
-            .unwrap_err();
+    let err = chance_drand_oracle::contract::execute(deps.as_mut(), mock_env(), info, bad_msg)
+        .unwrap_err();
     assert!(
         format!("{:?}", err).contains("VerificationFailed"),
         "Expected verification failure, got: {:?}",
@@ -187,9 +178,8 @@ fn test_drand_beacon_verification() {
     };
     let operator = deps.api.addr_make("operator");
     let info = message_info(&operator, &[]);
-    let err =
-        chance_drand_oracle::contract::execute(deps.as_mut(), mock_env(), info, dup_msg)
-            .unwrap_err();
+    let err = chance_drand_oracle::contract::execute(deps.as_mut(), mock_env(), info, dup_msg)
+        .unwrap_err();
     assert!(
         format!("{:?}", err).contains("BeaconAlreadyExists"),
         "Expected duplicate error, got: {:?}",
@@ -203,9 +193,8 @@ fn test_drand_beacon_verification() {
     };
     let random = deps.api.addr_make("random");
     let info = message_info(&random, &[]);
-    let err =
-        chance_drand_oracle::contract::execute(deps.as_mut(), mock_env(), info, unauth_msg)
-            .unwrap_err();
+    let err = chance_drand_oracle::contract::execute(deps.as_mut(), mock_env(), info, unauth_msg)
+        .unwrap_err();
     assert!(
         format!("{:?}", err).contains("Unauthorized"),
         "Expected unauthorized error, got: {:?}",
@@ -222,16 +211,15 @@ fn test_unstake_flow() {
     setup_hub(&mut deps);
 
     let user1 = deps.api.addr_make("user1");
-    let config: chance_staking_hub::state::Config =
-        from_json(
-            chance_staking_hub::contract::query(
-                deps.as_ref(),
-                mock_env(),
-                chance_staking_hub::msg::QueryMsg::Config {},
-            )
-            .unwrap(),
+    let config: chance_staking_hub::state::Config = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::Config {},
         )
-        .unwrap();
+        .unwrap(),
+    )
+    .unwrap();
 
     // 1. User stakes 100 INJ
     let info = message_info(&user1, &[Coin::new(100_000_000u128, "inj")]);
@@ -261,10 +249,7 @@ fn test_unstake_flow() {
 
     // 2. User unstakes 50 csINJ
     let user1 = deps.api.addr_make("user1");
-    let info = message_info(
-        &user1,
-        &[Coin::new(50_000_000u128, &config.csinj_denom)],
-    );
+    let info = message_info(&user1, &[Coin::new(50_000_000u128, &config.csinj_denom)]);
     let res = chance_staking_hub::contract::execute(
         deps.as_mut(),
         mock_env(),
@@ -289,7 +274,10 @@ fn test_unstake_flow() {
     )
     .unwrap();
     assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0].request.inj_amount, Uint128::from(50_000_000u128));
+    assert_eq!(
+        requests[0].request.inj_amount,
+        Uint128::from(50_000_000u128)
+    );
     assert!(!requests[0].request.claimed);
 
     // 4. Try claim before unlock → should fail
@@ -405,9 +393,10 @@ fn test_exchange_rate_appreciation() {
     // 2. Distribute rewards: simulate 100M INJ rewards in contract balance
     //    base_yield_bps = 500 (5%), so base_yield = 5M INJ added to backing
     let env = mock_env();
-    deps.querier
-        .bank
-        .update_balance(&env.contract.address, vec![Coin::new(100_000_000u128, "inj")]);
+    deps.querier.bank.update_balance(
+        &env.contract.address,
+        vec![Coin::new(100_000_000u128, "inj")],
+    );
     let operator = deps.api.addr_make("operator");
     let info = message_info(&operator, &[]);
     chance_staking_hub::contract::execute(
@@ -475,10 +464,7 @@ fn test_exchange_rate_appreciation() {
 
     // 5. User1 unstakes 50 csINJ → gets > 50 INJ (due to appreciation)
     let user1 = deps.api.addr_make("user1");
-    let info = message_info(
-        &user1,
-        &[Coin::new(50_000_000u128, &config.csinj_denom)],
-    );
+    let info = message_info(&user1, &[Coin::new(50_000_000u128, &config.csinj_denom)]);
     let res = chance_staking_hub::contract::execute(
         deps.as_mut(),
         mock_env(),
@@ -488,7 +474,11 @@ fn test_exchange_rate_appreciation() {
     .unwrap();
 
     // Check the unstake event for inj_owed
-    let unstake_event = res.events.iter().find(|e| e.ty == "chance_unstake").unwrap();
+    let unstake_event = res
+        .events
+        .iter()
+        .find(|e| e.ty == "chance_unstake")
+        .unwrap();
     let inj_owed: u128 = unstake_event
         .attributes
         .iter()
@@ -615,7 +605,10 @@ fn test_expired_draw() {
         .unwrap(),
     )
     .unwrap();
-    assert_eq!(draw.status, chance_staking_common::types::DrawStatus::Expired);
+    assert_eq!(
+        draw.status,
+        chance_staking_common::types::DrawStatus::Expired
+    );
 
     // Verify funds returned to pool
     let state: chance_reward_distributor::state::DrawStateInfo = from_json(
@@ -857,7 +850,10 @@ fn test_full_stake_and_draw_cycle() {
         .unwrap(),
     )
     .unwrap();
-    assert_eq!(draw.status, chance_staking_common::types::DrawStatus::Revealed);
+    assert_eq!(
+        draw.status,
+        chance_staking_common::types::DrawStatus::Revealed
+    );
     assert!(draw.winner.is_some());
     assert!(draw.final_randomness.is_some());
     assert!(draw.drand_randomness.is_some());
@@ -873,7 +869,10 @@ fn test_full_stake_and_draw_cycle() {
     )
     .unwrap();
     assert_eq!(state.total_draws_completed, 1);
-    assert_eq!(state.total_rewards_distributed, Uint128::from(10_000_000u128));
+    assert_eq!(
+        state.total_rewards_distributed,
+        Uint128::from(10_000_000u128)
+    );
 
     eprintln!("test_full_stake_and_draw_cycle passed");
 }
@@ -938,9 +937,7 @@ fn test_multiple_draws_per_epoch() {
     .unwrap();
 
     dist_deps.querier.update_wasm(move |query| match query {
-        WasmQuery::Smart { .. } => {
-            SystemResult::Ok(ContractResult::Ok(beacon_response.clone()))
-        }
+        WasmQuery::Smart { .. } => SystemResult::Ok(ContractResult::Ok(beacon_response.clone())),
         _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
             error: "Only smart queries supported".to_string(),
             request: Default::default(),
@@ -1066,8 +1063,8 @@ fn test_multiple_draws_per_epoch() {
             .unwrap(),
         )
         .unwrap();
-        let expected_pool = Uint128::from(50_000_000u128)
-            - reward_per_draw * Uint128::from(draw_num + 1);
+        let expected_pool =
+            Uint128::from(50_000_000u128) - reward_per_draw * Uint128::from(draw_num + 1);
         assert_eq!(
             state.regular_pool_balance, expected_pool,
             "Pool balance should decrease by reward_per_draw each draw"
@@ -1086,7 +1083,10 @@ fn test_multiple_draws_per_epoch() {
     )
     .unwrap();
     assert_eq!(state.total_draws_completed, 3);
-    assert_eq!(state.total_rewards_distributed, Uint128::from(30_000_000u128));
+    assert_eq!(
+        state.total_rewards_distributed,
+        Uint128::from(30_000_000u128)
+    );
     assert_eq!(state.regular_pool_balance, Uint128::from(20_000_000u128));
 
     eprintln!("test_multiple_draws_per_epoch passed");

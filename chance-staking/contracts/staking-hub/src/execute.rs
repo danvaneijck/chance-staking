@@ -9,8 +9,8 @@ use injective_cosmwasm::{
 use crate::error::ContractError;
 use crate::msg::DistributorExecuteMsg;
 use crate::state::{
-    UnstakeRequest, CONFIG, EPOCH_STATE, EXCHANGE_RATE, NEXT_UNSTAKE_ID,
-    PENDING_UNSTAKE_TOTAL, TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING, UNSTAKE_REQUESTS,
+    UnstakeRequest, CONFIG, EPOCH_STATE, EXCHANGE_RATE, NEXT_UNSTAKE_ID, PENDING_UNSTAKE_TOTAL,
+    TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING, UNSTAKE_REQUESTS,
 };
 
 type ContractResponse = cosmwasm_std::Response<InjectiveMsgWrapper>;
@@ -261,7 +261,9 @@ pub fn claim_unstaked(
     let pending_total = PENDING_UNSTAKE_TOTAL.load(deps.storage)?;
     PENDING_UNSTAKE_TOTAL.save(
         deps.storage,
-        &pending_total.checked_sub(total_claim).unwrap_or(Uint128::zero()),
+        &pending_total
+            .checked_sub(total_claim)
+            .unwrap_or(Uint128::zero()),
     )?;
 
     let send_msg = BankMsg::Send {
@@ -432,11 +434,13 @@ pub fn distribute_rewards(
 }
 
 /// Query contract's INJ balance.
-fn query_contract_inj_balance(querier: QuerierWrapper, env: &Env) -> Result<Uint128, ContractError> {
+fn query_contract_inj_balance(
+    querier: QuerierWrapper,
+    env: &Env,
+) -> Result<Uint128, ContractError> {
     let balance = querier.query_balance(&env.contract.address, "inj")?;
     Ok(balance.amount)
 }
-
 
 /// Submit a snapshot merkle root for the current epoch. Operator only.
 pub fn take_snapshot(
@@ -574,17 +578,12 @@ pub fn update_validators(
 
     CONFIG.save(deps.storage, &config)?;
 
-    let mut response = ContractResponse::new()
-        .add_attribute("action", "update_validators");
+    let mut response = ContractResponse::new().add_attribute("action", "update_validators");
 
     // Redelegate from removed validators to remaining validators
     if !removed.is_empty() && !config.validators.is_empty() {
-        let redelegate_msgs = create_redelegation_msgs(
-            deps.querier,
-            &env,
-            &removed,
-            &config.validators,
-        )?;
+        let redelegate_msgs =
+            create_redelegation_msgs(deps.querier, &env, &removed, &config.validators)?;
         for msg in redelegate_msgs {
             response = response.add_message(msg);
         }

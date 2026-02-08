@@ -9,8 +9,7 @@ use sha2::{Digest, Sha256};
 use crate::error::ContractError;
 use crate::msg::{CommitDrawParams, OracleQueryMsg, RevealDrawParams, UpdateConfigParams};
 use crate::state::{
-    Draw, Snapshot, CONFIG, DRAWS, DRAW_STATE, SNAPSHOTS, USER_TOTAL_WON,
-    USER_WINS, USER_WIN_COUNT,
+    Draw, Snapshot, CONFIG, DRAWS, DRAW_STATE, SNAPSHOTS, USER_TOTAL_WON, USER_WINS, USER_WIN_COUNT,
 };
 
 /// Fund the regular draw pool. Only staking hub can call.
@@ -183,9 +182,8 @@ pub fn commit_draw(
     let draw_id = state.next_draw_id;
     state.next_draw_id += 1;
 
-    let reveal_deadline = Timestamp::from_seconds(
-        env.block.time.seconds() + config.reveal_deadline_seconds,
-    );
+    let reveal_deadline =
+        Timestamp::from_seconds(env.block.time.seconds() + config.reveal_deadline_seconds);
 
     let draw = Draw {
         id: draw_id,
@@ -278,11 +276,10 @@ pub fn reveal_draw(
     }
 
     // 1. Verify commit pre-image
-    let operator_secret = hex::decode(&operator_secret_hex).map_err(|_| {
-        ContractError::InvalidHex {
+    let operator_secret =
+        hex::decode(&operator_secret_hex).map_err(|_| ContractError::InvalidHex {
             field: "operator_secret_hex".to_string(),
-        }
-    })?;
+        })?;
     let secret_hash: [u8; 32] = Sha256::digest(&operator_secret).into();
     let secret_hash_hex = hex::encode(secret_hash);
     if secret_hash_hex != draw.operator_commit {
@@ -384,7 +381,11 @@ pub fn reveal_draw(
     let user_total = USER_TOTAL_WON
         .may_load(deps.storage, &winner_addr)?
         .unwrap_or(Uint128::zero());
-    USER_TOTAL_WON.save(deps.storage, &winner_addr, &(user_total + draw.reward_amount))?;
+    USER_TOTAL_WON.save(
+        deps.storage,
+        &winner_addr,
+        &(user_total + draw.reward_amount),
+    )?;
 
     let draw_type_str = match draw.draw_type {
         DrawType::Regular => "regular",

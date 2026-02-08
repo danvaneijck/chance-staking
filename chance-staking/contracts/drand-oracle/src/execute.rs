@@ -1,7 +1,7 @@
 use cosmwasm_std::{DepsMut, Env, Event, MessageInfo, Response};
 
 use crate::error::ContractError;
-use crate::state::{BEACONS, CONFIG, LATEST_ROUND, StoredBeacon};
+use crate::state::{StoredBeacon, BEACONS, CONFIG, LATEST_ROUND};
 use crate::verify::verify_quicknet_beacon;
 
 /// Submit a drand beacon. Only operators can call this.
@@ -33,9 +33,11 @@ pub fn submit_beacon(
     })?;
 
     // BLS verification via drand-verify (pure Rust, no native crypto API)
-    let randomness = verify_quicknet_beacon(&config.quicknet_pubkey, round, &signature)
-        .map_err(|e| ContractError::VerificationFailed {
-            reason: e.to_string(),
+    let randomness =
+        verify_quicknet_beacon(&config.quicknet_pubkey, round, &signature).map_err(|e| {
+            ContractError::VerificationFailed {
+                reason: e.to_string(),
+            }
         })?;
 
     // Store beacon

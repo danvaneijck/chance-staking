@@ -38,10 +38,7 @@ pub enum ContractError {
     NoSnapshot,
 
     #[error("insufficient pool balance: need {needed}, have {available}")]
-    InsufficientPool {
-        needed: String,
-        available: String,
-    },
+    InsufficientPool { needed: String, available: String },
 
     #[error("drand beacon not found for round {round}")]
     BeaconNotFound { round: u64 },

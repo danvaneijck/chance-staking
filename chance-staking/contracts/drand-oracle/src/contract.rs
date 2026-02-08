@@ -5,7 +5,7 @@ use crate::error::ContractError;
 use crate::execute;
 use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
 use crate::query;
-use crate::state::{CONFIG, LATEST_ROUND, OracleConfig};
+use crate::state::{OracleConfig, CONFIG, LATEST_ROUND};
 
 const CONTRACT_NAME: &str = "crates.io:chance-drand-oracle";
 const CONTRACT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -20,11 +20,10 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     // Decode and validate pubkey
-    let pubkey_bytes = hex::decode(&msg.quicknet_pubkey_hex).map_err(|_| {
-        ContractError::InvalidHex {
+    let pubkey_bytes =
+        hex::decode(&msg.quicknet_pubkey_hex).map_err(|_| ContractError::InvalidHex {
             field: "quicknet_pubkey_hex".to_string(),
-        }
-    })?;
+        })?;
     if pubkey_bytes.len() != 96 {
         return Err(ContractError::InvalidPubkeyLength {
             got: pubkey_bytes.len(),
@@ -85,8 +84,8 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, message_info, MockApi};
     use crate::{state::BEACONS, verify::QUICKNET_PK_HEX};
+    use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env, MockApi};
 
     fn setup_contract(deps: DepsMut) {
         let mock_api = MockApi::default();
@@ -176,7 +175,10 @@ mod tests {
 
         // Second submission should fail
         let err = execute(deps.as_mut(), mock_env(), info, msg).unwrap_err();
-        assert!(matches!(err, ContractError::BeaconAlreadyExists { round: 1000 }));
+        assert!(matches!(
+            err,
+            ContractError::BeaconAlreadyExists { round: 1000 }
+        ));
     }
 
     #[test]

@@ -17,7 +17,9 @@ pub enum VerifyError {
 impl std::fmt::Display for VerifyError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VerifyError::InvalidPubkeyLength => write!(f, "invalid pubkey length (expected 96 bytes)"),
+            VerifyError::InvalidPubkeyLength => {
+                write!(f, "invalid pubkey length (expected 96 bytes)")
+            }
             VerifyError::InvalidPubkey => write!(f, "invalid pubkey (failed to parse G2 point)"),
             VerifyError::VerificationFailed(msg) => write!(f, "verification failed: {}", msg),
             VerifyError::InvalidSignature => write!(f, "invalid BLS signature"),
@@ -43,8 +45,8 @@ pub fn verify_quicknet_beacon(
 
     // Use G2PubkeyRfc for quicknet (bls-unchained-g1-rfc9380)
     // The Pubkey trait must be in scope to call from_fixed()
-    let pk = drand_verify::G2PubkeyRfc::from_fixed(pk_fixed)
-        .map_err(|_| VerifyError::InvalidPubkey)?;
+    let pk =
+        drand_verify::G2PubkeyRfc::from_fixed(pk_fixed).map_err(|_| VerifyError::InvalidPubkey)?;
 
     // Quicknet is unchained: previous_signature is empty
     let is_valid = pk
@@ -67,7 +69,8 @@ mod tests {
     /// Real quicknet test vector
     const TEST_ROUND: u64 = 1000;
     const TEST_SIG_HEX: &str = "b44679b9a59af2ec876b1a6b1ad52ea9b1615fc3982b19576350f93447cb1125e342b73a8dd2bacbe47e4b6b63ed5e39";
-    const TEST_RANDOMNESS_HEX: &str = "fe290beca10872ef2fb164d2aa4442de4566183ec51c56ff3cd603d930e54fdd";
+    const TEST_RANDOMNESS_HEX: &str =
+        "fe290beca10872ef2fb164d2aa4442de4566183ec51c56ff3cd603d930e54fdd";
 
     #[test]
     fn test_verify_quicknet_beacon_valid() {
@@ -75,7 +78,11 @@ mod tests {
         let sig_bytes = hex::decode(TEST_SIG_HEX).unwrap();
 
         let result = verify_quicknet_beacon(&pk_bytes, TEST_ROUND, &sig_bytes);
-        assert!(result.is_ok(), "Verification should succeed: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Verification should succeed: {:?}",
+            result.err()
+        );
 
         let randomness = result.unwrap();
         assert_eq!(hex::encode(randomness), TEST_RANDOMNESS_HEX);
@@ -89,7 +96,10 @@ mod tests {
         sig_bytes[0] ^= 0xFF;
 
         let result = verify_quicknet_beacon(&pk_bytes, TEST_ROUND, &sig_bytes);
-        assert!(result.is_err(), "Tampered signature should fail verification");
+        assert!(
+            result.is_err(),
+            "Tampered signature should fail verification"
+        );
     }
 
     #[test]

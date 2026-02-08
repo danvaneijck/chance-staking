@@ -3,8 +3,7 @@ use cw_storage_plus::Bound;
 
 use crate::msg::{ExchangeRateResponse, UnstakeRequestEntry};
 use crate::state::{
-    CONFIG, EPOCH_STATE, EXCHANGE_RATE, TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING,
-    UNSTAKE_REQUESTS,
+    CONFIG, EPOCH_STATE, EXCHANGE_RATE, TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING, UNSTAKE_REQUESTS,
 };
 
 pub fn query_config(deps: Deps) -> StdResult<Binary> {
