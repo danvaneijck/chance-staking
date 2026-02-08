@@ -120,6 +120,12 @@ export async function getDrawHistory(startAfter?: number, limit = 10): Promise<D
   return response.draws;
 }
 
+async function getRecentDraws(count: number): Promise<Draw[]> {
+  const drawState = await getDrawState();
+  const startAfter = Math.max(0, drawState.next_draw_id - count - 1);
+  return getDrawHistory(startAfter > 0 ? startAfter : undefined, count);
+}
+
 export async function commitDraw(
   drawType: "regular" | "big",
   epoch: number
@@ -261,7 +267,7 @@ export async function expireDraw(drawId: number): Promise<string> {
 
 export async function checkAndRevealDraws(): Promise<void> {
   // Check recent draws for any that are committed and ready to reveal
-  const draws = await getDrawHistory(undefined, 20);
+  const draws = await getRecentDraws(20);
   const nowNanos = BigInt(Date.now()) * BigInt(1_000_000);
 
   for (const draw of draws) {
@@ -318,7 +324,7 @@ export async function checkAndCommitDraws(): Promise<void> {
   const distributorConfig = await getDistributorConfig();
 
   // Check existing draws for this epoch (committed or revealed)
-  const draws = await getDrawHistory(undefined, 20);
+  const draws = await getRecentDraws(20);
   const hasRegularThisEpoch = draws.some(
     (d) =>
       d.draw_type === "regular" &&
