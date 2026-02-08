@@ -1,20 +1,75 @@
 import React, { useState } from 'react'
-import { ArrowDownUp, TrendingUp, Clock, Shield, Info } from 'lucide-react'
+import { ArrowDownUp, TrendingUp, Clock, Shield, Loader } from 'lucide-react'
+import { useStore } from '../store/useStore'
+import { INJ_DECIMALS } from '../config'
 
-interface StakingPanelProps {
-  isConnected: boolean
-  exchangeRate: number
+function formatBalance(raw: string): string {
+  const n = parseFloat(raw) / 10 ** INJ_DECIMALS
+  return n.toFixed(4)
 }
 
-export default function StakingPanel({ isConnected, exchangeRate }: StakingPanelProps) {
+function toRawAmount(human: string): string {
+  const n = parseFloat(human)
+  if (isNaN(n) || n <= 0) return '0'
+  return (BigInt(Math.floor(n * 10 ** 6)) * BigInt(10 ** (INJ_DECIMALS - 6))).toString()
+}
+
+export default function StakingPanel() {
+  const {
+    isConnected,
+    exchangeRate,
+    injBalance,
+    csinjBalance,
+    isLoading,
+    error,
+    stake: doStake,
+    unstake: doUnstake,
+  } = useStore()
+
   const [mode, setMode] = useState<'stake' | 'unstake'>('stake')
   const [amount, setAmount] = useState('')
+  const [txStatus, setTxStatus] = useState<'idle' | 'pending' | 'success' | 'error'>('idle')
 
+  const rate = parseFloat(exchangeRate) || 1
   const outputAmount = amount
     ? mode === 'stake'
-      ? (parseFloat(amount) / exchangeRate).toFixed(6)
-      : (parseFloat(amount) * exchangeRate).toFixed(6)
+      ? (parseFloat(amount) / rate).toFixed(6)
+      : (parseFloat(amount) * rate).toFixed(6)
     : '0.000000'
+
+  const balance = mode === 'stake' ? injBalance : csinjBalance
+  const formattedBalance = formatBalance(balance)
+
+  const handleMax = () => {
+    setAmount(formattedBalance)
+  }
+
+  const handleAction = async () => {
+    if (!amount || parseFloat(amount) <= 0) return
+    setTxStatus('pending')
+    try {
+      const raw = toRawAmount(amount)
+      if (mode === 'stake') {
+        await doStake(raw)
+      } else {
+        await doUnstake(raw)
+      }
+      setTxStatus('success')
+      setAmount('')
+      setTimeout(() => setTxStatus('idle'), 3000)
+    } catch {
+      setTxStatus('error')
+      setTimeout(() => setTxStatus('idle'), 4000)
+    }
+  }
+
+  const buttonLabel = () => {
+    if (!isConnected) return 'Connect Wallet'
+    if (txStatus === 'pending' || isLoading) return 'Broadcasting...'
+    if (txStatus === 'success') return 'Success!'
+    if (txStatus === 'error') return 'Failed - Try Again'
+    return mode === 'stake' ? 'Stake INJ' : 'Unstake csINJ'
+  }
 
   return (
     <section id="stake" style={styles.section}>
@@ -29,7 +84,7 @@ export default function StakingPanel({ isConnected, exchangeRate }: StakingPanel
                     ...styles.tab,
                     ...(mode === 'stake' ? styles.tabActive : {}),
                   }}
-                  onClick={() => setMode('stake')}
+                  onClick={() => { setMode('stake'); setAmount('') }}
                 >
                   Stake
                 </button>
@@ -38,7 +93,7 @@ export default function StakingPanel({ isConnected, exchangeRate }: StakingPanel
                     ...styles.tab,
                     ...(mode === 'unstake' ? styles.tabActive : {}),
                   }}
-                  onClick={() => setMode('unstake')}
+                  onClick={() => { setMode('unstake'); setAmount('') }}
                 >
                   Unstake
                 </button>
@@ -60,17 +115,14 @@ export default function StakingPanel({ isConnected, exchangeRate }: StakingPanel
                     style={styles.amountInput}
                   />
                   <div style={styles.tokenBadge}>
-                    <div style={styles.tokenIcon}>
-                      {mode === 'stake' ? '💎' : '✨'}
-                    </div>
                     <span style={styles.tokenName}>
                       {mode === 'stake' ? 'INJ' : 'csINJ'}
                     </span>
                   </div>
                 </div>
                 <div style={styles.balanceRow}>
-                  <span style={styles.balanceText}>Balance: 0.00</span>
-                  <button style={styles.maxButton}>MAX</button>
+                  <span style={styles.balanceText}>Balance: {formattedBalance}</span>
+                  <button style={styles.maxButton} onClick={handleMax}>MAX</button>
                 </div>
               </div>
 
@@ -89,9 +141,6 @@ export default function StakingPanel({ isConnected, exchangeRate }: StakingPanel
                 <div style={styles.inputRow}>
                   <div style={styles.outputValue}>{outputAmount}</div>
                   <div style={styles.tokenBadge}>
-                    <div style={styles.tokenIcon}>
-                      {mode === 'stake' ? '✨' : '💎'}
-                    </div>
                     <span style={styles.tokenName}>
                       {mode === 'stake' ? 'csINJ' : 'INJ'}
                     </span>
@@ -103,7 +152,7 @@ export default function StakingPanel({ isConnected, exchangeRate }: StakingPanel
               <div style={styles.rateInfo}>
                 <div style={styles.rateRow}>
                   <span style={styles.rateLabel}>Exchange Rate</span>
-                  <span style={styles.rateValue}>1 csINJ = {exchangeRate.toFixed(6)} INJ</span>
+                  <span style={styles.rateValue}>1 csINJ = {rate.toFixed(6)} INJ</span>
                 </div>
                 <div style={styles.rateRow}>
                   <span style={styles.rateLabel}>
@@ -115,19 +164,26 @@ export default function StakingPanel({ isConnected, exchangeRate }: StakingPanel
                 </div>
               </div>
 
+              {/* Error display */}
+              {error && txStatus === 'error' && (
+                <div style={styles.errorBar}>
+                  {error}
+                </div>
+              )}
+
               {/* CTA */}
               <button
                 style={{
                   ...styles.actionButton,
-                  opacity: isConnected && amount ? 1 : 0.5,
+                  opacity: isConnected && amount && txStatus !== 'pending' ? 1 : 0.5,
+                  ...(txStatus === 'success' ? { background: 'linear-gradient(135deg, #10b981, #059669)' } : {}),
+                  ...(txStatus === 'error' ? { background: 'linear-gradient(135deg, #ef4444, #dc2626)' } : {}),
                 }}
-                disabled={!isConnected || !amount}
+                disabled={!isConnected || !amount || txStatus === 'pending'}
+                onClick={handleAction}
               >
-                {!isConnected
-                  ? 'Connect Wallet'
-                  : mode === 'stake'
-                  ? 'Stake INJ'
-                  : 'Unstake csINJ'}
+                {txStatus === 'pending' && <Loader size={16} style={{ animation: 'spin 1s linear infinite' }} />}
+                {buttonLabel()}
               </button>
             </div>
           </div>
@@ -280,9 +336,6 @@ const styles: Record<string, React.CSSProperties> = {
     background: '#262626',
     border: '1px solid #2F2F2F',
   },
-  tokenIcon: {
-    fontSize: 18,
-  },
   tokenName: {
     fontSize: 14,
     fontWeight: 700,
@@ -346,6 +399,14 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: '#FFFFFF',
   },
+  errorBar: {
+    padding: '10px 14px',
+    borderRadius: 12,
+    background: 'rgba(239, 68, 68, 0.1)',
+    border: '1px solid rgba(239, 68, 68, 0.2)',
+    color: '#ef4444',
+    fontSize: 13,
+  },
   actionButton: {
     width: '100%',
     padding: '16px',
@@ -358,6 +419,10 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: 'pointer',
     transition: 'all 0.3s',
     boxShadow: '0 0 30px rgba(158, 127, 255, 0.2)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   infoColumn: {
     display: 'flex',

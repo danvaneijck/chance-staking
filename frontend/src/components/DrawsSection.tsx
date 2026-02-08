@@ -1,37 +1,46 @@
 import React, { useState } from 'react'
-import { Trophy, Clock, Sparkles, ChevronRight, Gift, Users, Coins } from 'lucide-react'
+import { Trophy, Clock, ChevronRight, Gift, Users, Coins } from 'lucide-react'
+import { useStore } from '../store/useStore'
+import { INJ_DECIMALS } from '../config'
 
-interface Draw {
-  id: number
-  type: 'regular' | 'big'
-  winner: string
-  reward: string
-  epoch: number
-  timestamp: string
-  drandRound: number
+function formatInj(raw: string): string {
+  const n = parseFloat(raw) / 10 ** INJ_DECIMALS
+  return n.toFixed(2)
 }
 
-const MOCK_DRAWS: Draw[] = [
-  { id: 142, type: 'regular', winner: 'inj1q8...x4m2', reward: '12.5 INJ', epoch: 47, timestamp: '2 min ago', drandRound: 48291 },
-  { id: 141, type: 'regular', winner: 'inj1k3...p9f7', reward: '12.5 INJ', epoch: 47, timestamp: '12 min ago', drandRound: 48289 },
-  { id: 140, type: 'big', winner: 'inj1m7...w2k5', reward: '250 INJ', epoch: 46, timestamp: '1 hour ago', drandRound: 48250 },
-  { id: 139, type: 'regular', winner: 'inj1r2...h8n3', reward: '12.5 INJ', epoch: 46, timestamp: '1 hour ago', drandRound: 48248 },
-  { id: 138, type: 'regular', winner: 'inj1t5...j6v1', reward: '12.5 INJ', epoch: 46, timestamp: '2 hours ago', drandRound: 48240 },
-  { id: 137, type: 'regular', winner: 'inj1q8...x4m2', reward: '12.5 INJ', epoch: 46, timestamp: '3 hours ago', drandRound: 48232 },
-  { id: 136, type: 'regular', winner: 'inj1a9...c3b8', reward: '12.5 INJ', epoch: 45, timestamp: '5 hours ago', drandRound: 48200 },
-]
+function truncateAddr(addr: string): string {
+  if (!addr) return ''
+  if (addr.length <= 16) return addr
+  return `${addr.slice(0, 10)}...${addr.slice(-6)}`
+}
+
+function timeAgo(timestampNanos: string): string {
+  const ts = parseInt(timestampNanos) / 1e9
+  const now = Date.now() / 1000
+  const diff = now - ts
+  if (diff < 60) return 'just now'
+  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)} hours ago`
+  return `${Math.floor(diff / 86400)} days ago`
+}
 
 export default function DrawsSection() {
+  const recentDraws = useStore((s) => s.recentDraws)
+  const regularPoolBalance = useStore((s) => s.regularPoolBalance)
+  const bigPoolBalance = useStore((s) => s.bigPoolBalance)
+
   const [filter, setFilter] = useState<'all' | 'regular' | 'big'>('all')
 
   const filtered = filter === 'all'
-    ? MOCK_DRAWS
-    : MOCK_DRAWS.filter(d => d.type === filter)
+    ? recentDraws
+    : recentDraws.filter((d) => d.draw_type === filter)
+
+  // Only show revealed draws (with winners)
+  const revealedDraws = filtered.filter((d) => d.status === 'revealed')
 
   return (
     <section id="draws" style={styles.section}>
       <div style={styles.container}>
-        {/* Section header */}
         <div style={styles.sectionHeader}>
           <div style={styles.sectionBadge}>
             <Trophy size={14} color="#f59e0b" />
@@ -52,12 +61,12 @@ export default function DrawsSection() {
               </div>
               <div>
                 <div style={styles.poolLabel}>Regular Pool</div>
-                <div style={styles.poolValue}>847.3 INJ</div>
+                <div style={styles.poolValue}>{formatInj(regularPoolBalance)} INJ</div>
               </div>
             </div>
             <div style={styles.poolMeta}>
               <span style={styles.poolMetaItem}>
-                <Clock size={12} /> Draws every 10 min
+                <Clock size={12} /> Draws every epoch
               </span>
               <span style={styles.poolMetaItem}>
                 <Users size={12} /> Weighted by balance
@@ -74,13 +83,13 @@ export default function DrawsSection() {
                 <Gift size={20} color="#f472b6" />
               </div>
               <div>
-                <div style={styles.poolLabel}>Big Monthly Pool</div>
-                <div style={styles.poolValue}>4,291.7 INJ</div>
+                <div style={styles.poolLabel}>Big Jackpot Pool</div>
+                <div style={styles.poolValue}>{formatInj(bigPoolBalance)} INJ</div>
               </div>
             </div>
             <div style={styles.poolMeta}>
               <span style={styles.poolMetaItem}>
-                <Clock size={12} /> Next draw in 12 days
+                <Clock size={12} /> Monthly draws
               </span>
               <span style={styles.poolMetaItem}>
                 <Users size={12} /> Equal odds
@@ -98,7 +107,7 @@ export default function DrawsSection() {
 
         {/* Filter tabs */}
         <div style={styles.filterRow}>
-          {(['all', 'regular', 'big'] as const).map(f => (
+          {(['all', 'regular', 'big'] as const).map((f) => (
             <button
               key={f}
               style={{
@@ -114,7 +123,12 @@ export default function DrawsSection() {
 
         {/* Draws list */}
         <div style={styles.drawsList}>
-          {filtered.map((draw, i) => (
+          {revealedDraws.length === 0 && (
+            <div style={styles.emptyState}>
+              No draws yet. Draws appear here once the first epoch completes.
+            </div>
+          )}
+          {revealedDraws.map((draw, i) => (
             <div
               key={draw.id}
               style={{
@@ -125,26 +139,28 @@ export default function DrawsSection() {
               <div style={styles.drawLeft}>
                 <div style={{
                   ...styles.drawTypeBadge,
-                  background: draw.type === 'big'
+                  background: draw.draw_type === 'big'
                     ? 'rgba(244, 114, 182, 0.12)'
                     : 'rgba(158, 127, 255, 0.12)',
-                  color: draw.type === 'big' ? '#f472b6' : '#9E7FFF',
+                  color: draw.draw_type === 'big' ? '#f472b6' : '#9E7FFF',
                 }}>
-                  {draw.type === 'big' ? '🏆' : '✨'} #{draw.id}
+                  {draw.draw_type === 'big' ? '🏆' : '✨'} #{draw.id}
                 </div>
                 <div style={styles.drawInfo}>
-                  <div style={styles.drawWinner}>{draw.winner}</div>
+                  <div style={styles.drawWinner}>
+                    {truncateAddr(draw.winner || '')}
+                  </div>
                   <div style={styles.drawMeta}>
-                    Epoch {draw.epoch} · drand #{draw.drandRound} · {draw.timestamp}
+                    Epoch {draw.epoch} · drand #{draw.target_drand_round} · {timeAgo(draw.created_at)}
                   </div>
                 </div>
               </div>
               <div style={styles.drawRight}>
                 <div style={{
                   ...styles.drawReward,
-                  color: draw.type === 'big' ? '#f472b6' : '#10b981',
+                  color: draw.draw_type === 'big' ? '#f472b6' : '#10b981',
                 }}>
-                  +{draw.reward}
+                  +{formatInj(draw.reward_amount)} INJ
                 </div>
                 <ChevronRight size={16} color="#A3A3A3" />
               </div>
@@ -284,6 +300,12 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: 4,
+  },
+  emptyState: {
+    textAlign: 'center' as const,
+    padding: '48px 24px',
+    color: '#A3A3A3',
+    fontSize: 14,
   },
   drawRow: {
     display: 'flex',
