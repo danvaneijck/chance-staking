@@ -37,9 +37,6 @@ pub enum ContractError {
     #[error("no snapshot available for current epoch")]
     NoSnapshot,
 
-    #[error("insufficient pool balance: need {needed}, have {available}")]
-    InsufficientPool { needed: String, available: String },
-
     #[error("drand beacon not found for round {round}")]
     BeaconNotFound { round: u64 },
 
@@ -48,4 +45,15 @@ pub enum ContractError {
 
     #[error("must send INJ to fund pool")]
     NoFundsSent,
+
+    #[error("{draw_type} draw too soon: epoch {epoch}, last draw epoch {last_epoch}, need {min_gap} epochs between draws")]
+    DrawTooSoon {
+        draw_type: String,
+        epoch: u64,
+        last_epoch: u64,
+        min_gap: u64,
+    },
+
+    #[error("{pool} pool is empty")]
+    EmptyPool { pool: String },
 }

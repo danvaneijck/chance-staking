@@ -10,6 +10,8 @@ pub struct InstantiateMsg {
     pub staking_hub: String,
     pub drand_oracle: String,
     pub reveal_deadline_seconds: u64,
+    pub epochs_between_regular: u64,
+    pub epochs_between_big: u64,
 }
 
 #[cw_serde]
@@ -25,13 +27,12 @@ pub enum ExecuteMsg {
         total_weight: Uint128,
         num_holders: u32,
     },
-    /// Commit to a draw. Operator only.
+    /// Commit to a draw. Operator only. Reward = full pool balance.
     CommitDraw {
         draw_type: DrawType,
         /// sha256(secret), hex-encoded
         operator_commit: String,
         target_drand_round: u64,
-        reward_amount: Uint128,
         epoch: u64,
     },
     /// Reveal a committed draw with the winner. Operator only.
@@ -55,6 +56,8 @@ pub enum ExecuteMsg {
         operator: Option<String>,
         staking_hub: Option<String>,
         reveal_deadline_seconds: Option<u64>,
+        epochs_between_regular: Option<u64>,
+        epochs_between_big: Option<u64>,
     },
 }
 
@@ -128,7 +131,6 @@ pub struct CommitDrawParams {
     pub draw_type: DrawType,
     pub operator_commit: String,
     pub target_drand_round: u64,
-    pub reward_amount: Uint128,
     pub epoch: u64,
 }
 
@@ -147,4 +149,6 @@ pub struct UpdateConfigParams {
     pub operator: Option<String>,
     pub staking_hub: Option<String>,
     pub reveal_deadline_seconds: Option<u64>,
+    pub epochs_between_regular: Option<u64>,
+    pub epochs_between_big: Option<u64>,
 }

@@ -23,6 +23,10 @@ pub struct DistributorConfig {
     pub drand_oracle: Addr,
     /// How long the operator has to reveal after committing (seconds)
     pub reveal_deadline_seconds: u64,
+    /// Minimum epochs between regular draws
+    pub epochs_between_regular: u64,
+    /// Minimum epochs between big draws
+    pub epochs_between_big: u64,
 }
 
 #[cw_serde]
@@ -32,6 +36,8 @@ pub struct DrawStateInfo {
     pub big_pool_balance: Uint128,
     pub total_draws_completed: u64,
     pub total_rewards_distributed: Uint128,
+    pub last_regular_draw_epoch: Option<u64>,
+    pub last_big_draw_epoch: Option<u64>,
 }
 
 #[cw_serde]

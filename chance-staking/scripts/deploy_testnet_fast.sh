@@ -53,6 +53,8 @@ QUICKNET_PERIOD_SECONDS=3
 
 # -- Reward distributor config (FAST TEST) --
 REVEAL_DEADLINE_SECONDS=300
+EPOCHS_BETWEEN_REGULAR=1
+EPOCHS_BETWEEN_BIG=3
 
 # -- Staking hub config (FAST TEST) --
 EPOCH_DURATION_SECONDS=120
@@ -273,7 +275,9 @@ DISTRIBUTOR_INIT_MSG=$(cat <<EOF
   "operator": "$OPERATOR_ADDRESS",
   "staking_hub": "$ADMIN_ADDRESS",
   "drand_oracle": "$DRAND_ORACLE_ADDRESS",
-  "reveal_deadline_seconds": $REVEAL_DEADLINE_SECONDS
+  "reveal_deadline_seconds": $REVEAL_DEADLINE_SECONDS,
+  "epochs_between_regular": $EPOCHS_BETWEEN_REGULAR,
+  "epochs_between_big": $EPOCHS_BETWEEN_BIG
 }
 EOF
 )
