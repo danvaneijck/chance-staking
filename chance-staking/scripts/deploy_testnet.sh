@@ -45,10 +45,10 @@ QUICKNET_PERIOD_SECONDS=3
 # -- Reward distributor config --
 REVEAL_DEADLINE_SECONDS=180
 EPOCHS_BETWEEN_REGULAR=1
-EPOCHS_BETWEEN_BIG=7
+EPOCHS_BETWEEN_BIG=6
 
 # -- Staking hub config --
-EPOCH_DURATION_SECONDS=120
+EPOCH_DURATION_SECONDS=600
 PROTOCOL_FEE_BPS=500
 BASE_YIELD_BPS=500
 REGULAR_POOL_BPS=7000
@@ -63,9 +63,9 @@ STAKING_HUB_WASM="./artifacts/chance_staking_hub.wasm"
 # -- Optional: reuse existing code IDs (set to skip uploading) --
 # If set, the script will skip storing that contract's wasm and use the given ID.
 # Leave empty to upload fresh.
-EXISTING_DRAND_CODE_ID="39232"
-EXISTING_DISTRIBUTOR_CODE_ID="39233"
-EXISTING_STAKING_HUB_CODE_ID="39234"
+EXISTING_DRAND_CODE_ID=""
+EXISTING_DISTRIBUTOR_CODE_ID=""
+EXISTING_STAKING_HUB_CODE_ID=""
 
 ################################################################################
 #                                   HELPERS                                    #
