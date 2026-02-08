@@ -13,15 +13,13 @@ use crate::state::{
     TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING, UNSTAKE_REQUESTS,
 };
 
+/// 10^18 — Decimal's internal scaling factor, used for overflow-safe rate arithmetic.
+const DECIMAL_FRACTIONAL: u128 = 1_000_000_000_000_000_000;
+
 type ContractResponse = cosmwasm_std::Response<InjectiveMsgWrapper>;
 
 /// 21 days in seconds for unbonding period
 const UNBONDING_PERIOD_SECS: u64 = 21 * 24 * 60 * 60;
-
-/// 10^18 — the internal scaling factor used by cosmwasm_std::Decimal.
-/// Decimal stores `value * 10^18` in its atomics. We use this to convert
-/// a Decimal back to Uint128 by dividing atomics by this constant.
-const DECIMAL_FRACTIONAL: Uint128 = Uint128::new(1_000_000_000_000_000_000u128);
 
 /// Create the Token Factory denom during instantiation.
 pub fn create_denom(
@@ -32,13 +30,6 @@ pub fn create_denom(
     let msg = create_new_denom_msg(contract_addr.clone(), subdenom.to_string());
     let full_denom = format!("factory/{}/{}", contract_addr, subdenom);
     Ok((msg, full_denom))
-}
-
-/// Convert a Decimal to Uint128 by truncating the fractional part.
-/// Decimal internally stores `value * 10^18`, so we divide atomics by 10^18.
-#[inline]
-fn decimal_to_uint128(d: Decimal) -> Uint128 {
-    d.atomics() / DECIMAL_FRACTIONAL
 }
 
 /// Stake INJ → mint csINJ at current exchange rate.
@@ -69,10 +60,15 @@ pub fn stake(
     let exchange_rate = EXCHANGE_RATE.load(deps.storage)?;
 
     // Calculate csINJ to mint: inj_amount / exchange_rate
-    // exchange_rate = total_inj_backing / total_csinj_supply
-    // csinj_to_mint = inj_amount / exchange_rate
-    let csinj_decimal = Decimal::from_ratio(inj_amount, 1u128) / exchange_rate;
-    let csinj_amount = decimal_to_uint128(csinj_decimal);
+    // Instead of Decimal::from_ratio(inj_amount, 1) which overflows for amounts >= 10^21
+    // (Decimal stores atomics * 10^18, so 10^21 * 10^18 = 10^39 > u128::MAX),
+    // we use multiply_ratio with the rate's atomics (u256 internally) to avoid overflow.
+    let rate_atomics = exchange_rate.atomics();
+    let csinj_amount = if rate_atomics.is_zero() {
+        inj_amount
+    } else {
+        inj_amount.multiply_ratio(Uint128::new(DECIMAL_FRACTIONAL), rate_atomics)
+    };
 
     // Update totals
     let new_backing = TOTAL_INJ_BACKING.load(deps.storage)? + inj_amount;
@@ -149,8 +145,9 @@ pub fn unstake(
     let exchange_rate = EXCHANGE_RATE.load(deps.storage)?;
 
     // Calculate INJ to return: csinj_amount * exchange_rate
-    let inj_decimal = Decimal::from_ratio(csinj_amount, 1u128) * exchange_rate;
-    let inj_amount = decimal_to_uint128(inj_decimal);
+    // Uses multiply_ratio with rate atomics (u256 internally) to avoid Decimal overflow.
+    let rate_atomics = exchange_rate.atomics();
+    let inj_amount = csinj_amount.multiply_ratio(rate_atomics, Uint128::new(DECIMAL_FRACTIONAL));
 
     // Update totals
     let new_backing = TOTAL_INJ_BACKING
