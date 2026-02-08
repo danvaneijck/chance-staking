@@ -1,7 +1,7 @@
 import React from 'react'
 import { Sparkles, Zap } from 'lucide-react'
 import { useStore } from '../store/useStore'
-import { formatInj } from '../utils/formatNumber'
+import { formatInj, formatNumber } from '../utils/formatNumber'
 import EpochCountdown from './EpochCountdown'
 import ActivityTicker from './ActivityTicker'
 
@@ -70,7 +70,7 @@ export default function HeroSection() {
           </div>
           <div style={styles.statDivider} />
           <div style={styles.statCard}>
-            <div style={styles.statValue}>{parseFloat(exchangeRate).toFixed(4)}</div>
+            <div style={styles.statValue}>{formatNumber(parseFloat(exchangeRate), 4)}</div>
             <div style={styles.statLabel}>csINJ Rate</div>
           </div>
         </div>

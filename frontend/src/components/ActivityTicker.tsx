@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react'
 import { Trophy } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { formatInj } from '../utils/formatNumber'
 
 function truncateAddr(addr: string): string {
   if (!addr) return ''
@@ -38,7 +39,6 @@ export default function ActivityTicker() {
       <div style={styles.trackContainer}>
         <div style={styles.track}>
           {items.map((draw, i) => {
-            const rewardInj = parseFloat(draw.reward_amount) / 1e18
             const isBig = draw.draw_type === 'big'
             return (
               <div key={`${draw.id}-${i}`} style={styles.item}>
@@ -56,7 +56,7 @@ export default function ActivityTicker() {
                   ...styles.amount,
                   color: isBig ? '#f472b6' : '#10b981',
                 }}>
-                  {rewardInj < 0.01 ? rewardInj.toFixed(6) : rewardInj.toFixed(2)} INJ
+                  {formatInj(draw.reward_amount)} INJ
                 </span>
                 <span style={styles.time}>
                   {timeAgo(draw.revealed_at || draw.created_at)}

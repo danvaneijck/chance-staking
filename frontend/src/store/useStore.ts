@@ -8,6 +8,7 @@ import { WalletStrategy } from "@injectivelabs/wallet-strategy";
 import { getInjectiveAddress } from "@injectivelabs/sdk-ts";
 import { NETWORK, CHAIN_ID, EVM_CHAIN_ID, CONTRACTS } from "../config";
 import * as contracts from "../services/contracts";
+import { formatInjString } from "../utils/formatNumber";
 
 // ---------- Types ----------
 export type WalletType = "metamask" | "keplr" | "leap" | "rabby";
@@ -359,9 +360,8 @@ export const useStore = create<AppState>()(
                                         draw.draw_type === "big"
                                             ? "Big Jackpot"
                                             : "Regular Draw";
-                                    const rewardInj =
-                                        parseFloat(draw.reward_amount) /
-                                        1e18;
+                                    const rewardFormatted =
+                                        formatInjString(draw.reward_amount);
                                     // Check if the connected user won
                                     const userWon =
                                         connectedAddr &&
@@ -371,13 +371,13 @@ export const useStore = create<AppState>()(
                                         get().addToast({
                                             type: "success",
                                             title: `You won ${typeLabel} #${draw.id}!`,
-                                            message: `Congratulations! You won ${rewardInj.toFixed(2)} INJ!`,
+                                            message: `Congratulations! You won ${rewardFormatted} INJ!`,
                                         });
                                     } else {
                                         get().addToast({
                                             type: "success",
                                             title: `${typeLabel} #${draw.id} Revealed!`,
-                                            message: `Winner: ${draw.winner?.slice(0, 10)}... won ${rewardInj.toFixed(2)} INJ`,
+                                            message: `Winner: ${draw.winner?.slice(0, 10)}... won ${rewardFormatted} INJ`,
                                         });
                                     }
                                 }
