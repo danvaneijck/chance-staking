@@ -98,7 +98,8 @@ pub fn execute(
         ExecuteMsg::ClaimUnstaked { request_ids } => {
             execute::claim_unstaked(deps, env, info, request_ids)
         }
-        ExecuteMsg::AdvanceEpoch {} => execute::advance_epoch(deps, env, info),
+        ExecuteMsg::ClaimRewards {} => execute::claim_rewards(deps, env, info),
+        ExecuteMsg::DistributeRewards {} => execute::distribute_rewards(deps, env, info),
         ExecuteMsg::TakeSnapshot {
             merkle_root,
             total_weight,
@@ -375,24 +376,49 @@ mod tests {
     }
 
     #[test]
-    fn test_advance_epoch_unauthorized() {
+    fn test_claim_rewards_unauthorized() {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
         let random_user = deps.api.addr_make("random_user");
-        let info = message_info(&random_user, &coins(1000, "inj"));
+        let info = message_info(&random_user, &[]);
         let err = execute(
             deps.as_mut(),
             mock_env(),
             info,
-            ExecuteMsg::AdvanceEpoch {},
+            ExecuteMsg::ClaimRewards {},
         )
         .unwrap_err();
         assert!(matches!(err, ContractError::Unauthorized { .. }));
     }
 
     #[test]
-    fn test_advance_epoch() {
+    fn test_claim_rewards() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
+        let res = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::ClaimRewards {},
+        )
+        .unwrap();
+
+        // Should have: 1 SetWithdrawAddress + 2 WithdrawDelegatorReward (one per validator)
+        assert_eq!(res.messages.len(), 3);
+
+        // Check event
+        assert!(res
+            .events
+            .iter()
+            .any(|e| e.ty == "chance_rewards_claimed"));
+    }
+
+    #[test]
+    fn test_distribute_rewards() {
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
 
@@ -401,14 +427,21 @@ mod tests {
         let info = message_info(&user1, &coins(1_000_000_000, "inj"));
         execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
 
-        // Advance epoch with rewards
+        // Simulate rewards arriving in contract balance (100M INJ rewards)
+        let env = mock_env();
+        let contract_addr = env.contract.address.clone();
+        deps.querier
+            .bank
+            .update_balance(contract_addr, coins(100_000_000, "inj"));
+
+        // Distribute rewards (step 2)
         let operator = deps.api.addr_make("operator");
-        let info = message_info(&operator, &coins(100_000_000, "inj"));
+        let info = message_info(&operator, &[]);
         let res = execute(
             deps.as_mut(),
-            mock_env(),
+            env,
             info,
-            ExecuteMsg::AdvanceEpoch {},
+            ExecuteMsg::DistributeRewards {},
         )
         .unwrap();
 
@@ -429,6 +462,23 @@ mod tests {
             .events
             .iter()
             .any(|e| e.ty == "chance_epoch_advanced"));
+    }
+
+    #[test]
+    fn test_distribute_rewards_unauthorized() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let random_user = deps.api.addr_make("random_user");
+        let info = message_info(&random_user, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::DistributeRewards {},
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::Unauthorized { .. }));
     }
 
     #[test]
@@ -537,5 +587,75 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, ContractError::Unauthorized { .. }));
+    }
+
+    #[test]
+    fn test_update_validators_with_redelegation() {
+        use cosmwasm_std::FullDelegation;
+
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let env = mock_env();
+
+        // Mock a delegation of 1000 INJ to val1
+        let delegation = FullDelegation::create(
+            env.contract.address.clone(),
+            "val1".to_string(),
+            Coin::new(1_000_000u128, "inj"),
+            Coin::new(1_000_000u128, "inj"),
+            vec![],
+        );
+        deps.querier.staking.update(
+            "inj",
+            &[],
+            &[delegation],
+        );
+
+        let admin = deps.api.addr_make("admin");
+        let info = message_info(&admin, &[]);
+        let res = execute(
+            deps.as_mut(),
+            env,
+            info,
+            ExecuteMsg::UpdateValidators {
+                add: vec!["val3".to_string()],
+                remove: vec!["val1".to_string()],
+            },
+        )
+        .unwrap();
+
+        // Should have redelegation messages from val1 to val2 and val3
+        assert!(res.messages.len() >= 2);
+
+        // Check validators updated
+        let config = CONFIG.load(deps.as_ref().storage).unwrap();
+        assert_eq!(config.validators, vec!["val2".to_string(), "val3".to_string()]);
+
+        // Check event
+        assert!(res
+            .events
+            .iter()
+            .any(|e| e.ty == "chance_validators_updated"));
+    }
+
+    #[test]
+    fn test_update_validators_remove_all_fails() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let admin = deps.api.addr_make("admin");
+        let info = message_info(&admin, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::UpdateValidators {
+                add: vec![],
+                remove: vec!["val1".to_string(), "val2".to_string()],
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::NoValidators));
     }
 }

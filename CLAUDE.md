@@ -128,12 +128,15 @@ Manages INJ staking, csINJ (liquid staking token) minting/burning, epoch advance
 // Claim unlocked unstake requests (21 days after unstake)
 { "claim_unstaked": { "request_ids": [0, 1] } }
 
-// Advance epoch: claims validator rewards, splits into base yield + pools (operator only)
-// Send the claimed staking rewards as INJ in funds.
-// Split: base_yield_bps -> backing, protocol_fee_bps -> treasury,
-//        regular_pool_bps -> regular pool, big_pool_bps -> big pool
-{ "advance_epoch": {} }
-// funds: [{ "denom": "inj", "amount": "..." }]
+// Step 1: Claim staking rewards from all validators (operator only)
+// Sends WithdrawDelegatorReward msgs internally. Call distribute_rewards after.
+{ "claim_rewards": {} }
+
+// Step 2: Distribute claimed rewards and advance epoch (operator only)
+// Reads contract INJ balance, subtracts reserved unstake amounts,
+// splits surplus: base_yield_bps -> backing, protocol_fee_bps -> treasury,
+//                 regular_pool_bps -> regular pool, big_pool_bps -> big pool
+{ "distribute_rewards": {} }
 
 // Submit snapshot merkle root for current epoch (operator only)
 // This also forwards the snapshot to the reward-distributor via SetSnapshot
@@ -152,6 +155,7 @@ Manages INJ staking, csINJ (liquid staking token) minting/burning, epoch advance
 } }
 
 // Update validator set (admin only)
+// Removed validators are automatically redelegated to remaining validators
 { "update_validators": { "add": ["injvaloper1..."], "remove": [] } }
 ```
 

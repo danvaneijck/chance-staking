@@ -1,6 +1,6 @@
 use cosmwasm_std::{
-    coins, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, Env, Event, MessageInfo, StakingMsg,
-    Uint128, WasmMsg,
+    coins, BankMsg, Coin, CosmosMsg, Decimal, DepsMut, DistributionMsg, Env, Event, MessageInfo,
+    QuerierWrapper, StakingMsg, Uint128, WasmMsg,
 };
 use injective_cosmwasm::{
     create_burn_tokens_msg, create_mint_tokens_msg, create_new_denom_msg, InjectiveMsgWrapper,
@@ -266,9 +266,11 @@ pub fn claim_unstaked(
         .add_attribute("request_ids", format!("{:?}", request_ids)))
 }
 
-/// Advance to next epoch. Claims validator rewards and distributes them.
+/// Step 1 of epoch advancement: withdraw staking rewards from all validators.
+/// The rewards will be deposited into this contract's balance.
+/// Operator must call `DistributeRewards` after this tx confirms.
 /// Operator only.
-pub fn advance_epoch(
+pub fn claim_rewards(
     deps: DepsMut,
     env: Env,
     info: MessageInfo,
@@ -277,21 +279,70 @@ pub fn advance_epoch(
 
     if info.sender != config.operator {
         return Err(ContractError::Unauthorized {
-            reason: "only operator can advance epoch".to_string(),
+            reason: "only operator can claim rewards".to_string(),
+        });
+    }
+
+    if config.validators.is_empty() {
+        return Err(ContractError::NoValidators);
+    }
+
+    let contract_addr = env.contract.address.to_string();
+
+    // Set withdraw address to this contract so rewards come here
+    let set_withdraw_msg = DistributionMsg::SetWithdrawAddress {
+        address: contract_addr.clone(),
+    };
+
+    let mut response = ContractResponse::new()
+        .add_message(set_withdraw_msg)
+        .add_attribute("action", "claim_rewards");
+
+    // Withdraw delegator rewards from each validator
+    for validator in &config.validators {
+        let withdraw_msg = DistributionMsg::WithdrawDelegatorReward {
+            validator: validator.clone(),
+        };
+        response = response.add_message(withdraw_msg);
+    }
+
+    response = response.add_event(
+        Event::new("chance_rewards_claimed")
+            .add_attribute("validators", format!("{:?}", config.validators)),
+    );
+
+    Ok(response)
+}
+
+/// Step 2 of epoch advancement: distribute the claimed rewards and advance epoch.
+/// Reads the contract's INJ balance, subtracts reserved amounts (pending unstake claims),
+/// and distributes the surplus as staking rewards.
+/// Operator only.
+pub fn distribute_rewards(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<ContractResponse, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+
+    if info.sender != config.operator {
+        return Err(ContractError::Unauthorized {
+            reason: "only operator can distribute rewards".to_string(),
         });
     }
 
     let mut epoch_state = EPOCH_STATE.load(deps.storage)?;
 
-    // The operator sends the claimed rewards as funds.
-    let total_rewards = info
-        .funds
-        .iter()
-        .find(|c| c.denom == "inj")
-        .map(|c| c.amount)
-        .unwrap_or(Uint128::zero());
+    // Query this contract's current INJ balance
+    let contract_balance = query_contract_inj_balance(deps.querier, &env)?;
 
-    // Split rewards according to basis points using Uint128::multiply_ratio.
+    // Calculate reserved INJ: total backing (delegated INJ value owed to csINJ holders)
+    // The contract's "free" balance is whatever INJ is sitting in the contract beyond
+    // what's reserved for pending unstake claims.
+    let reserved = query_pending_unstake_total(deps.as_ref().storage)?;
+    let total_rewards = contract_balance.saturating_sub(reserved);
+
+    // Split rewards according to basis points
     let regular_amount = total_rewards.multiply_ratio(config.regular_pool_bps as u128, 10000u128);
     let big_amount = total_rewards.multiply_ratio(config.big_pool_bps as u128, 10000u128);
     let base_yield = total_rewards.multiply_ratio(config.base_yield_bps as u128, 10000u128);
@@ -323,7 +374,7 @@ pub fn advance_epoch(
     EPOCH_STATE.save(deps.storage, &epoch_state)?;
 
     let mut response = ContractResponse::new()
-        .add_attribute("action", "advance_epoch")
+        .add_attribute("action", "distribute_rewards")
         .add_attribute("new_epoch", epoch_state.current_epoch.to_string())
         .add_attribute("total_rewards", total_rewards.to_string());
 
@@ -359,7 +410,7 @@ pub fn advance_epoch(
     response = response.add_event(
         Event::new("chance_epoch_advanced")
             .add_attribute("epoch", epoch_state.current_epoch.to_string())
-            .add_attribute("total_rewards_claimed", total_rewards.to_string())
+            .add_attribute("total_rewards", total_rewards.to_string())
             .add_attribute("regular_pool_funded", regular_amount.to_string())
             .add_attribute("big_pool_funded", big_amount.to_string())
             .add_attribute("base_yield_added", base_yield.to_string())
@@ -368,6 +419,26 @@ pub fn advance_epoch(
     );
 
     Ok(response)
+}
+
+/// Query contract's INJ balance.
+fn query_contract_inj_balance(querier: QuerierWrapper, env: &Env) -> Result<Uint128, ContractError> {
+    let balance = querier.query_balance(&env.contract.address, "inj")?;
+    Ok(balance.amount)
+}
+
+/// Sum of all pending (unclaimed, unlocked or not) unstake request amounts.
+fn query_pending_unstake_total(
+    storage: &dyn cosmwasm_std::Storage,
+) -> Result<Uint128, ContractError> {
+    let mut total = Uint128::zero();
+    for result in UNSTAKE_REQUESTS.range(storage, None, None, cosmwasm_std::Order::Ascending) {
+        let (_, request) = result?;
+        if !request.claimed {
+            total += request.inj_amount;
+        }
+    }
+    Ok(total)
 }
 
 /// Submit a snapshot merkle root for the current epoch. Operator only.
@@ -468,9 +539,10 @@ pub fn update_config(
 }
 
 /// Update validator set. Admin only.
+/// Redelegates stake from removed validators to remaining validators.
 pub fn update_validators(
     deps: DepsMut,
-    _env: Env,
+    env: Env,
     info: MessageInfo,
     add: Vec<String>,
     remove: Vec<String>,
@@ -483,18 +555,52 @@ pub fn update_validators(
         });
     }
 
-    for v in &remove {
-        config.validators.retain(|existing| existing != v);
-    }
-    for v in add {
-        if !config.validators.contains(&v) {
-            config.validators.push(v);
+    // First add new validators so they can receive redelegations
+    for v in &add {
+        if !config.validators.contains(v) {
+            config.validators.push(v.clone());
         }
+    }
+
+    // Collect removed validators and remove from list
+    let mut removed = Vec::new();
+    for v in &remove {
+        if config.validators.contains(v) {
+            removed.push(v.clone());
+            config.validators.retain(|existing| existing != v);
+        }
+    }
+
+    if config.validators.is_empty() && !removed.is_empty() {
+        return Err(ContractError::NoValidators);
     }
 
     CONFIG.save(deps.storage, &config)?;
 
-    Ok(ContractResponse::new().add_attribute("action", "update_validators"))
+    let mut response = ContractResponse::new()
+        .add_attribute("action", "update_validators");
+
+    // Redelegate from removed validators to remaining validators
+    if !removed.is_empty() && !config.validators.is_empty() {
+        let redelegate_msgs = create_redelegation_msgs(
+            deps.querier,
+            &env,
+            &removed,
+            &config.validators,
+        )?;
+        for msg in redelegate_msgs {
+            response = response.add_message(msg);
+        }
+    }
+
+    response = response.add_event(
+        Event::new("chance_validators_updated")
+            .add_attribute("added", format!("{:?}", add))
+            .add_attribute("removed", format!("{:?}", remove))
+            .add_attribute("current", format!("{:?}", config.validators)),
+    );
+
+    Ok(response)
 }
 
 /// Helper: create delegation messages distributing INJ across validators (round-robin).
@@ -555,6 +661,57 @@ fn create_undelegation_msgs(
                     amount,
                 },
             }));
+        }
+    }
+
+    Ok(msgs)
+}
+
+/// Helper: create redelegation messages moving stake from removed validators to remaining ones.
+/// Queries each removed validator's delegation amount and redelegates evenly to dst validators.
+fn create_redelegation_msgs(
+    querier: QuerierWrapper,
+    env: &Env,
+    src_validators: &[String],
+    dst_validators: &[String],
+) -> Result<Vec<CosmosMsg<InjectiveMsgWrapper>>, ContractError> {
+    if dst_validators.is_empty() {
+        return Err(ContractError::NoValidators);
+    }
+
+    let mut msgs = Vec::new();
+    let contract_addr = &env.contract.address;
+
+    for src_val in src_validators {
+        // Query how much is delegated to this validator
+        let delegation = querier.query_delegation(contract_addr, src_val)?;
+        let delegated_amount = delegation
+            .map(|d| d.amount.amount)
+            .unwrap_or(Uint128::zero());
+
+        if delegated_amount.is_zero() {
+            continue;
+        }
+
+        // Distribute evenly across destination validators
+        let per_dst = delegated_amount / Uint128::from(dst_validators.len() as u128);
+        let remainder = delegated_amount - per_dst * Uint128::from(dst_validators.len() as u128);
+
+        for (i, dst_val) in dst_validators.iter().enumerate() {
+            let mut amount = per_dst;
+            if i == 0 {
+                amount += remainder;
+            }
+            if !amount.is_zero() {
+                msgs.push(CosmosMsg::Staking(StakingMsg::Redelegate {
+                    src_validator: src_val.clone(),
+                    dst_validator: dst_val.clone(),
+                    amount: Coin {
+                        denom: "inj".to_string(),
+                        amount,
+                    },
+                }));
+            }
         }
     }
 

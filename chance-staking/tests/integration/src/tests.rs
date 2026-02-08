@@ -398,15 +398,19 @@ fn test_exchange_rate_appreciation() {
     assert_eq!(rate_resp.rate, Decimal::one());
     assert_eq!(rate_resp.total_csinj_supply, Uint128::from(100_000_000u128));
 
-    // 2. Advance epoch with 100M INJ rewards
+    // 2. Distribute rewards: simulate 100M INJ rewards in contract balance
     //    base_yield_bps = 500 (5%), so base_yield = 5M INJ added to backing
+    let env = mock_env();
+    deps.querier
+        .bank
+        .update_balance(&env.contract.address, vec![Coin::new(100_000_000u128, "inj")]);
     let operator = deps.api.addr_make("operator");
-    let info = message_info(&operator, &[Coin::new(100_000_000u128, "inj")]);
+    let info = message_info(&operator, &[]);
     chance_staking_hub::contract::execute(
         deps.as_mut(),
-        mock_env(),
+        env,
         info,
-        chance_staking_hub::msg::ExecuteMsg::AdvanceEpoch {},
+        chance_staking_hub::msg::ExecuteMsg::DistributeRewards {},
     )
     .unwrap();
 
