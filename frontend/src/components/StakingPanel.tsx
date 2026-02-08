@@ -66,9 +66,9 @@ export default function StakingPanel() {
   }
 
   return (
-    <section id="stake" style={styles.section}>
-      <div style={styles.container}>
-        <div style={styles.grid}>
+    <section id="stake" className="staking-section" style={styles.section}>
+      <div className="section-container" style={styles.container}>
+        <div className="staking-grid" style={styles.grid}>
           {/* Staking Card */}
           <div style={styles.stakingCard}>
             <div style={styles.cardHeader}>
@@ -123,7 +123,7 @@ export default function StakingPanel() {
               {/* Arrow */}
               <div style={styles.arrowContainer}>
                 <div style={styles.arrowCircle}>
-                  <ArrowDownUp size={16} color="#9E7FFF" />
+                  <ArrowDownUp size={15} color="#8B6FFF" />
                 </div>
               </div>
 
@@ -170,7 +170,7 @@ export default function StakingPanel() {
                 style={{
                   ...styles.actionButton,
                   opacity: isConnected && amount && txStatus !== 'pending' ? 1 : 0.5,
-                  ...(txStatus === 'success' ? { background: 'linear-gradient(135deg, #10b981, #059669)' } : {}),
+                  ...(txStatus === 'success' ? { background: 'linear-gradient(135deg, #22c55e, #16a34a)' } : {}),
                   ...(txStatus === 'error' ? { background: 'linear-gradient(135deg, #ef4444, #dc2626)' } : {}),
                 }}
                 disabled={!isConnected || !amount || txStatus === 'pending'}
@@ -184,9 +184,13 @@ export default function StakingPanel() {
 
           {/* Info Cards */}
           <div style={styles.infoColumn}>
-            <div style={styles.infoCard}>
+            <div
+              style={styles.infoCard}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(34, 197, 94, 0.2)' }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = '#2A2A38' }}
+            >
               <div style={styles.infoIconWrap}>
-                <TrendingUp size={20} color="#10b981" />
+                <TrendingUp size={18} color="#22c55e" />
               </div>
               <h3 style={styles.infoTitle}>Base Yield</h3>
               <div style={styles.infoValue}>~5% APY</div>
@@ -196,9 +200,13 @@ export default function StakingPanel() {
               </p>
             </div>
 
-            <div style={styles.infoCard}>
-              <div style={{ ...styles.infoIconWrap, background: 'rgba(158, 127, 255, 0.12)' }}>
-                <Shield size={20} color="#9E7FFF" />
+            <div
+              style={styles.infoCard}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(139, 111, 255, 0.2)' }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = '#2A2A38' }}
+            >
+              <div style={{ ...styles.infoIconWrap, background: 'rgba(139, 111, 255, 0.1)' }}>
+                <Shield size={18} color="#8B6FFF" />
               </div>
               <h3 style={styles.infoTitle}>Prize Draws</h3>
               <div style={styles.infoValue}>70% Regular + 20% Big</div>
@@ -208,9 +216,13 @@ export default function StakingPanel() {
               </p>
             </div>
 
-            <div style={styles.infoCard}>
-              <div style={{ ...styles.infoIconWrap, background: 'rgba(56, 189, 248, 0.12)' }}>
-                <Clock size={20} color="#38bdf8" />
+            <div
+              style={styles.infoCard}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(56, 189, 248, 0.2)' }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = '#2A2A38' }}
+            >
+              <div style={{ ...styles.infoIconWrap, background: 'rgba(56, 189, 248, 0.1)' }}>
+                <Clock size={18} color="#38bdf8" />
               </div>
               <h3 style={styles.infoTitle}>Verifiable Randomness</h3>
               <div style={styles.infoValue}>drand + Commit-Reveal</div>
@@ -228,7 +240,7 @@ export default function StakingPanel() {
 
 const styles: Record<string, React.CSSProperties> = {
   section: {
-    padding: '120px 0 80px',
+    padding: '100px 0 80px',
     position: 'relative',
   },
   container: {
@@ -239,63 +251,63 @@ const styles: Record<string, React.CSSProperties> = {
   grid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: 32,
+    gap: 28,
     alignItems: 'start',
   },
   stakingCard: {
-    background: '#262626',
-    border: '1px solid #2F2F2F',
-    borderRadius: 24,
+    background: '#1A1A22',
+    border: '1px solid #2A2A38',
+    borderRadius: 20,
     overflow: 'hidden',
-    boxShadow: '0 0 60px rgba(158, 127, 255, 0.06)',
+    boxShadow: '0 0 48px rgba(139, 111, 255, 0.04)',
   },
   cardHeader: {
-    padding: '20px 24px 0',
+    padding: '18px 20px 0',
   },
   tabRow: {
     display: 'flex',
     gap: 4,
-    background: '#1a1a1a',
-    borderRadius: 14,
-    padding: 4,
+    background: '#0F0F13',
+    borderRadius: 12,
+    padding: 3,
   },
   tab: {
     flex: 1,
-    padding: '12px 0',
-    borderRadius: 12,
+    padding: '10px 0',
+    borderRadius: 10,
     background: 'transparent',
-    color: '#A3A3A3',
-    fontSize: 14,
+    color: '#8E8EA0',
+    fontSize: 13,
     fontWeight: 600,
     border: 'none',
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
   tabActive: {
-    background: '#2F2F2F',
-    color: '#FFFFFF',
+    background: '#252530',
+    color: '#F0F0F5',
   },
   cardBody: {
-    padding: 24,
+    padding: 20,
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: 16,
+    gap: 14,
   },
   inputGroup: {
-    background: '#1a1a1a',
-    borderRadius: 16,
+    background: '#0F0F13',
+    borderRadius: 14,
     padding: 16,
     border: '1px solid transparent',
     transition: 'border-color 0.2s',
   },
   inputLabel: {
     display: 'block',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 500,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     marginBottom: 8,
     textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
+    letterSpacing: '0.06em',
   },
   inputRow: {
     display: 'flex',
@@ -307,8 +319,8 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     background: 'transparent',
     border: 'none',
-    color: '#FFFFFF',
-    fontSize: 28,
+    color: '#F0F0F5',
+    fontSize: 26,
     fontWeight: 700,
     outline: 'none',
     padding: 0,
@@ -316,24 +328,24 @@ const styles: Record<string, React.CSSProperties> = {
   },
   outputValue: {
     flex: 1,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 700,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     letterSpacing: '-0.02em',
   },
   tokenBadge: {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    padding: '8px 14px',
-    borderRadius: 12,
-    background: '#262626',
-    border: '1px solid #2F2F2F',
+    padding: '7px 12px',
+    borderRadius: 10,
+    background: '#1A1A22',
+    border: '1px solid #2A2A38',
   },
   tokenName: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 700,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
   },
   balanceRow: {
     display: 'flex',
@@ -343,32 +355,32 @@ const styles: Record<string, React.CSSProperties> = {
   },
   balanceText: {
     fontSize: 12,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
   },
   maxButton: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 700,
-    color: '#9E7FFF',
-    background: 'rgba(158, 127, 255, 0.1)',
+    color: '#8B6FFF',
+    background: 'rgba(139, 111, 255, 0.08)',
     border: 'none',
     borderRadius: 6,
-    padding: '4px 8px',
+    padding: '3px 8px',
     cursor: 'pointer',
-    letterSpacing: '0.05em',
+    letterSpacing: '0.06em',
   },
   arrowContainer: {
     display: 'flex',
     justifyContent: 'center',
-    margin: '-8px 0',
+    margin: '-6px 0',
     position: 'relative' as const,
     zIndex: 2,
   },
   arrowCircle: {
-    width: 36,
-    height: 36,
+    width: 34,
+    height: 34,
     borderRadius: '50%',
-    background: '#262626',
-    border: '2px solid #2F2F2F',
+    background: '#1A1A22',
+    border: '2px solid #2A2A38',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -377,7 +389,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: 8,
-    padding: '12px 0',
+    padding: '10px 0',
   },
   rateRow: {
     display: 'flex',
@@ -385,34 +397,34 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
   },
   rateLabel: {
-    fontSize: 13,
-    color: '#A3A3A3',
+    fontSize: 12,
+    color: '#8E8EA0',
   },
   rateValue: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 600,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
   },
   errorBar: {
     padding: '10px 14px',
-    borderRadius: 12,
-    background: 'rgba(239, 68, 68, 0.1)',
-    border: '1px solid rgba(239, 68, 68, 0.2)',
+    borderRadius: 10,
+    background: 'rgba(239, 68, 68, 0.08)',
+    border: '1px solid rgba(239, 68, 68, 0.15)',
     color: '#ef4444',
     fontSize: 13,
   },
   actionButton: {
     width: '100%',
-    padding: '16px',
-    borderRadius: 16,
-    background: 'linear-gradient(135deg, #9E7FFF, #7B5CE0)',
+    padding: '14px',
+    borderRadius: 14,
+    background: 'linear-gradient(135deg, #8B6FFF, #6B4FD6)',
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 700,
     border: 'none',
     cursor: 'pointer',
     transition: 'all 0.3s',
-    boxShadow: '0 0 30px rgba(158, 127, 255, 0.2)',
+    boxShadow: '0 0 24px rgba(139, 111, 255, 0.15)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -421,40 +433,40 @@ const styles: Record<string, React.CSSProperties> = {
   infoColumn: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: 16,
+    gap: 14,
   },
   infoCard: {
-    background: '#262626',
-    border: '1px solid #2F2F2F',
-    borderRadius: 20,
-    padding: 24,
+    background: '#1A1A22',
+    border: '1px solid #2A2A38',
+    borderRadius: 16,
+    padding: 22,
     transition: 'all 0.3s',
   },
   infoIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    background: 'rgba(16, 185, 129, 0.12)',
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    background: 'rgba(34, 197, 94, 0.1)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
   },
   infoTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 700,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     marginBottom: 4,
   },
   infoValue: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 600,
-    color: '#9E7FFF',
+    color: '#8B6FFF',
     marginBottom: 8,
   },
   infoDesc: {
     fontSize: 13,
     lineHeight: 1.6,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
   },
 }

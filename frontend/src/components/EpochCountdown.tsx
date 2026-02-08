@@ -14,7 +14,6 @@ export default function EpochCountdown() {
     if (!epochStartTime || epochStartTime === '0' || !epochDurationSeconds) return
 
     const update = () => {
-      // epochStartTime is in nanoseconds
       const startSec = parseInt(epochStartTime) / 1e9
       const endSec = startSec + epochDurationSeconds
       const nowSec = Date.now() / 1000
@@ -45,14 +44,14 @@ export default function EpochCountdown() {
         <div style={styles.label}>
           <div style={{
             ...styles.pulseCircle,
-            background: isAlmostDone ? '#f59e0b' : '#10b981',
+            background: isAlmostDone ? '#f59e0b' : '#22c55e',
           }}>
             <div style={{
               ...styles.pulseInner,
-              background: isAlmostDone ? '#f59e0b' : '#10b981',
+              background: isAlmostDone ? '#f59e0b' : '#22c55e',
             }} />
           </div>
-          <Timer size={14} color="#A3A3A3" />
+          <Timer size={13} color="#8E8EA0" />
           <span style={styles.labelText}>Epoch {currentEpoch}</span>
         </div>
         <span style={styles.nextLabel}>Next Draw</span>
@@ -87,7 +86,7 @@ export default function EpochCountdown() {
           width: `${progress}%`,
           background: isAlmostDone
             ? 'linear-gradient(90deg, #f59e0b, #ef4444)'
-            : 'linear-gradient(90deg, #9E7FFF, #38bdf8)',
+            : 'linear-gradient(90deg, #8B6FFF, #38bdf8)',
         }} />
       </div>
     </div>
@@ -96,26 +95,26 @@ export default function EpochCountdown() {
 
 const styles: Record<string, React.CSSProperties> = {
   wrapper: {
-    background: 'rgba(38, 38, 38, 0.8)',
-    border: '1px solid #2F2F2F',
-    borderRadius: 16,
-    padding: '16px 20px',
+    background: 'rgba(26, 26, 34, 0.8)',
+    border: '1px solid #2A2A38',
+    borderRadius: 14,
+    padding: '14px 18px',
     backdropFilter: 'blur(8px)',
   },
   header: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   label: {
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
+    gap: 7,
   },
   pulseCircle: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: '50%',
     position: 'relative' as const,
   },
@@ -127,13 +126,13 @@ const styles: Record<string, React.CSSProperties> = {
     animation: 'pulse 2s ease-in-out infinite',
   },
   labelText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 600,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
   },
   nextLabel: {
-    fontSize: 12,
-    color: '#A3A3A3',
+    fontSize: 11,
+    color: '#8E8EA0',
     fontWeight: 500,
   },
   countdown: {
@@ -141,7 +140,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'baseline',
     justifyContent: 'center',
     gap: 2,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   unit: {
     display: 'flex',
@@ -149,27 +148,27 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 2,
   },
   unitValue: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 800,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     letterSpacing: '-0.02em',
     fontVariantNumeric: 'tabular-nums',
   },
   unitLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 500,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
   },
   separator: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 700,
-    color: '#A3A3A3',
-    margin: '0 4px',
+    color: '#8E8EA0',
+    margin: '0 3px',
   },
   progressTrack: {
-    height: 4,
+    height: 3,
     borderRadius: 2,
-    background: '#1a1a1a',
+    background: '#0F0F13',
     overflow: 'hidden',
   },
   progressBar: {

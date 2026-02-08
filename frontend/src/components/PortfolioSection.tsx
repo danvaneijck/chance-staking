@@ -28,8 +28,7 @@ export default function PortfolioSection() {
   const [tab, setTab] = useState<'overview' | 'unstaking' | 'wins'>('overview')
   const [claiming, setClaiming] = useState<number | null>(null)
 
-  const now = Date.now() * 1e6 // nanoseconds
-
+  const now = Date.now() * 1e6
   const pendingRequests = unstakeRequests.filter((r) => !r.request.claimed)
   const claimableRequests = pendingRequests.filter(
     (r) => parseInt(r.request.unlock_time) <= now / 1e6,
@@ -46,7 +45,7 @@ export default function PortfolioSection() {
 
   return (
     <section id="portfolio" style={styles.section}>
-      <div style={styles.container}>
+      <div className="section-container" style={styles.container}>
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Your Portfolio</h2>
         </div>
@@ -74,7 +73,7 @@ export default function PortfolioSection() {
         {/* Overview tab */}
         {tab === 'overview' && (
           <>
-            <div style={styles.overviewGrid}>
+            <div className="portfolio-overview-grid" style={styles.overviewGrid}>
               <div style={styles.balanceCard}>
                 <div style={styles.balanceLabel}>INJ Balance</div>
                 <div style={styles.balanceValue}>{formatInj(injBalance)} INJ</div>
@@ -85,7 +84,7 @@ export default function PortfolioSection() {
               </div>
               <div style={styles.balanceCard}>
                 <div style={styles.balanceLabel}>Total Wins</div>
-                <div style={{ ...styles.balanceValue, color: '#10b981' }}>
+                <div style={{ ...styles.balanceValue, color: '#22c55e' }}>
                   {userWins?.total_wins ?? 0}
                 </div>
               </div>
@@ -102,7 +101,7 @@ export default function PortfolioSection() {
               <div style={styles.oddsCard}>
                 <div style={styles.oddsHeader}>
                   <div style={styles.oddsIconWrap}>
-                    <Target size={18} color="#9E7FFF" />
+                    <Target size={16} color="#8B6FFF" />
                   </div>
                   <div>
                     <div style={styles.oddsTitle}>Your Draw Odds</div>
@@ -154,9 +153,9 @@ export default function PortfolioSection() {
           </>
         )}
 
-        {/* Unstaking tab */}
+        {/* Unstaking tab - scrollable */}
         {tab === 'unstaking' && (
-          <div style={styles.list}>
+          <div style={styles.listScrollable}>
             {pendingRequests.length === 0 && (
               <div style={styles.emptyState}>
                 No pending unstake requests.
@@ -168,7 +167,7 @@ export default function PortfolioSection() {
                 onClick={() => handleClaim(claimableRequests.map((r) => r.id))}
                 disabled={isLoading}
               >
-                <Download size={14} />
+                <Download size={13} />
                 Claim All ({claimableRequests.length})
               </button>
             )}
@@ -183,10 +182,10 @@ export default function PortfolioSection() {
                     <div style={{
                       ...styles.unstakeIcon,
                       background: isClaimable
-                        ? 'rgba(16, 185, 129, 0.12)'
-                        : 'rgba(245, 158, 11, 0.12)',
+                        ? 'rgba(34, 197, 94, 0.1)'
+                        : 'rgba(245, 158, 11, 0.1)',
                     }}>
-                      <Clock size={16} color={isClaimable ? '#10b981' : '#f59e0b'} />
+                      <Clock size={15} color={isClaimable ? '#22c55e' : '#f59e0b'} />
                     </div>
                     <div>
                       <div style={styles.unstakeAmount}>
@@ -194,7 +193,7 @@ export default function PortfolioSection() {
                       </div>
                       <div style={styles.unstakeMeta}>
                         {isClaimable ? (
-                          <span style={{ color: '#10b981' }}>Ready to claim</span>
+                          <span style={{ color: '#22c55e' }}>Ready to claim</span>
                         ) : (
                           <span>Unlocks {formatTimestamp(entry.request.unlock_time)}</span>
                         )}
@@ -208,9 +207,9 @@ export default function PortfolioSection() {
                       disabled={isClaiming || isLoading}
                     >
                       {isClaiming ? (
-                        <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                        <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} />
                       ) : (
-                        <Download size={14} />
+                        <Download size={13} />
                       )}
                       {isClaiming ? 'Claiming...' : 'Claim'}
                     </button>
@@ -221,9 +220,9 @@ export default function PortfolioSection() {
           </div>
         )}
 
-        {/* Wins tab */}
+        {/* Wins tab - scrollable */}
         {tab === 'wins' && (
-          <div style={styles.list}>
+          <div style={styles.listScrollable}>
             {(!userWinDraws || userWinDraws.length === 0) && (
               <div style={styles.emptyState}>
                 No wins yet. Keep staking for more chances!
@@ -235,12 +234,12 @@ export default function PortfolioSection() {
                   <div style={{
                     ...styles.winIcon,
                     background: draw.draw_type === 'big'
-                      ? 'rgba(244, 114, 182, 0.12)'
-                      : 'rgba(158, 127, 255, 0.12)',
+                      ? 'rgba(244, 114, 182, 0.1)'
+                      : 'rgba(139, 111, 255, 0.1)',
                   }}>
                     <Trophy
-                      size={16}
-                      color={draw.draw_type === 'big' ? '#f472b6' : '#9E7FFF'}
+                      size={15}
+                      color={draw.draw_type === 'big' ? '#f472b6' : '#8B6FFF'}
                     />
                   </div>
                   <div>
@@ -254,7 +253,7 @@ export default function PortfolioSection() {
                 </div>
                 <div style={{
                   ...styles.winAmount,
-                  color: draw.draw_type === 'big' ? '#f472b6' : '#10b981',
+                  color: draw.draw_type === 'big' ? '#f472b6' : '#22c55e',
                 }}>
                   +{formatInj(draw.reward_amount)} INJ
                 </div>
@@ -277,29 +276,29 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '0 24px',
   },
   sectionHeader: {
-    marginBottom: 24,
+    marginBottom: 20,
   },
   sectionTitle: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 800,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     letterSpacing: '-0.03em',
   },
   tabRow: {
     display: 'flex',
-    gap: 4,
-    background: '#1a1a1a',
-    borderRadius: 14,
-    padding: 4,
-    marginBottom: 24,
+    gap: 3,
+    background: '#0F0F13',
+    borderRadius: 12,
+    padding: 3,
+    marginBottom: 20,
   },
   tab: {
     flex: 1,
-    padding: '12px 0',
-    borderRadius: 12,
+    padding: '10px 0',
+    borderRadius: 10,
     background: 'transparent',
-    color: '#A3A3A3',
-    fontSize: 14,
+    color: '#8E8EA0',
+    fontSize: 13,
     fontWeight: 600,
     border: 'none',
     cursor: 'pointer',
@@ -307,104 +306,107 @@ const styles: Record<string, React.CSSProperties> = {
     textAlign: 'center' as const,
   },
   tabActive: {
-    background: '#2F2F2F',
-    color: '#FFFFFF',
+    background: '#252530',
+    color: '#F0F0F5',
   },
   overviewGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: 16,
+    gap: 12,
   },
   balanceCard: {
-    background: '#262626',
-    border: '1px solid #2F2F2F',
-    borderRadius: 20,
-    padding: 24,
+    background: '#1A1A22',
+    border: '1px solid #2A2A38',
+    borderRadius: 16,
+    padding: 20,
   },
   balanceLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 500,
-    color: '#A3A3A3',
-    marginBottom: 8,
+    color: '#8E8EA0',
+    marginBottom: 6,
   },
   balanceValue: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 800,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     letterSpacing: '-0.02em',
   },
-  list: {
+  listScrollable: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: 8,
+    gap: 6,
+    maxHeight: 380,
+    overflowY: 'auto' as const,
+    paddingRight: 4,
   },
   emptyState: {
     textAlign: 'center' as const,
-    padding: '48px 24px',
-    color: '#A3A3A3',
-    fontSize: 14,
-    background: '#262626',
-    borderRadius: 16,
-    border: '1px solid #2F2F2F',
+    padding: '40px 24px',
+    color: '#8E8EA0',
+    fontSize: 13,
+    background: '#1A1A22',
+    borderRadius: 14,
+    border: '1px solid #2A2A38',
   },
   claimAllButton: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    padding: '12px 24px',
-    borderRadius: 12,
-    background: 'linear-gradient(135deg, #10b981, #059669)',
+    gap: 7,
+    padding: '10px 20px',
+    borderRadius: 10,
+    background: 'linear-gradient(135deg, #22c55e, #16a34a)',
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 600,
     border: 'none',
     cursor: 'pointer',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   unstakeRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '16px 20px',
-    borderRadius: 16,
-    background: '#262626',
-    border: '1px solid #2F2F2F',
+    padding: '14px 18px',
+    borderRadius: 14,
+    background: '#1A1A22',
+    border: '1px solid #2A2A38',
   },
   unstakeLeft: {
     display: 'flex',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
   },
   unstakeIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
   unstakeAmount: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 700,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
   },
   unstakeMeta: {
-    fontSize: 12,
-    color: '#A3A3A3',
+    fontSize: 11,
+    color: '#8E8EA0',
     marginTop: 2,
   },
   claimButton: {
     display: 'flex',
     alignItems: 'center',
-    gap: 6,
-    padding: '8px 16px',
-    borderRadius: 10,
-    background: 'rgba(16, 185, 129, 0.12)',
-    color: '#10b981',
-    fontSize: 13,
+    gap: 5,
+    padding: '7px 14px',
+    borderRadius: 8,
+    background: 'rgba(34, 197, 94, 0.1)',
+    color: '#22c55e',
+    fontSize: 12,
     fontWeight: 600,
-    border: '1px solid rgba(16, 185, 129, 0.2)',
+    border: '1px solid rgba(34, 197, 94, 0.15)',
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
@@ -412,76 +414,77 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '16px 20px',
-    borderRadius: 16,
-    background: '#262626',
-    border: '1px solid #2F2F2F',
+    padding: '14px 18px',
+    borderRadius: 14,
+    background: '#1A1A22',
+    border: '1px solid #2A2A38',
   },
   winLeft: {
     display: 'flex',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
   },
   winIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
   winLabel: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: 600,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
   },
   winMeta: {
-    fontSize: 12,
-    color: '#A3A3A3',
+    fontSize: 11,
+    color: '#8E8EA0',
     marginTop: 2,
   },
   winAmount: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 700,
+    fontVariantNumeric: 'tabular-nums',
   },
   oddsCard: {
-    marginTop: 16,
-    background: 'linear-gradient(135deg, rgba(38, 38, 38, 1), rgba(158, 127, 255, 0.04))',
-    border: '1px solid rgba(158, 127, 255, 0.15)',
-    borderRadius: 20,
-    padding: 24,
+    marginTop: 12,
+    background: 'linear-gradient(135deg, rgba(26, 26, 34, 1), rgba(139, 111, 255, 0.03))',
+    border: '1px solid rgba(139, 111, 255, 0.12)',
+    borderRadius: 16,
+    padding: 22,
   },
   oddsHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: 14,
-    marginBottom: 20,
+    gap: 12,
+    marginBottom: 18,
   },
   oddsIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    background: 'rgba(158, 127, 255, 0.12)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    background: 'rgba(139, 111, 255, 0.1)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   oddsTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: 700,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
   },
   oddsSubtitle: {
-    fontSize: 12,
-    color: '#A3A3A3',
+    fontSize: 11,
+    color: '#8E8EA0',
     marginTop: 2,
   },
   oddsBody: {
     display: 'flex',
     alignItems: 'center',
     gap: 0,
-    marginBottom: 20,
+    marginBottom: 18,
   },
   oddsMain: {
     flex: 1,
@@ -489,48 +492,48 @@ const styles: Record<string, React.CSSProperties> = {
   },
   oddsDivider: {
     width: 1,
-    height: 56,
-    background: '#2F2F2F',
+    height: 48,
+    background: '#2A2A38',
     flexShrink: 0,
   },
   oddsPercent: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 800,
-    color: '#9E7FFF',
+    color: '#8B6FFF',
     letterSpacing: '-0.02em',
     lineHeight: 1.2,
   },
   oddsLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 600,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     marginTop: 4,
   },
   oddsDetail: {
     fontSize: 11,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     marginTop: 2,
   },
   oddsBarContainer: {
     marginTop: 4,
   },
   oddsBarTrack: {
-    height: 4,
+    height: 3,
     borderRadius: 2,
-    background: '#1a1a1a',
+    background: '#0F0F13',
     overflow: 'hidden',
   },
   oddsBarFill: {
     height: '100%',
     borderRadius: 2,
-    background: 'linear-gradient(90deg, #9E7FFF, #38bdf8)',
+    background: 'linear-gradient(90deg, #8B6FFF, #38bdf8)',
     transition: 'width 0.5s ease',
     minWidth: 2,
   },
   oddsBarLabel: {
-    fontSize: 11,
-    color: '#525252',
-    marginTop: 6,
+    fontSize: 10,
+    color: '#525260',
+    marginTop: 5,
     textAlign: 'center' as const,
   },
 }

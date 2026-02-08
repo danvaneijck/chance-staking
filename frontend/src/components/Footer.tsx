@@ -4,11 +4,11 @@ import { Sparkles, Github, ExternalLink } from 'lucide-react'
 export default function Footer() {
   return (
     <footer style={styles.footer}>
-      <div style={styles.container}>
-        <div style={styles.top}>
+      <div className="section-container" style={styles.container}>
+        <div className="footer-top" style={styles.top}>
           <div style={styles.brand}>
             <div style={styles.logoRow}>
-              <Sparkles size={20} color="#9E7FFF" />
+              <Sparkles size={18} color="#8B6FFF" />
               <span style={styles.logoText}>Chance.Staking</span>
             </div>
             <p style={styles.brandDesc}>
@@ -17,26 +17,23 @@ export default function Footer() {
             </p>
           </div>
 
-          <div style={styles.linksGrid}>
+          <div className="footer-links-grid" style={styles.linksGrid}>
             <div style={styles.linkCol}>
               <h4 style={styles.linkTitle}>Protocol</h4>
               <a href="#stake" style={styles.link}>Stake</a>
               <a href="#draws" style={styles.link}>Draws</a>
-              <a href="#stats" style={styles.link}>Statistics</a>
-              <a href="#" style={styles.link}>Governance</a>
+              <a href="#how-it-works" style={styles.link}>How It Works</a>
             </div>
             <div style={styles.linkCol}>
               <h4 style={styles.linkTitle}>Resources</h4>
               <a href="#" style={styles.link}>Documentation</a>
               <a href="#" style={styles.link}>Smart Contracts</a>
               <a href="#" style={styles.link}>Audit Report</a>
-              <a href="#" style={styles.link}>Bug Bounty</a>
             </div>
             <div style={styles.linkCol}>
               <h4 style={styles.linkTitle}>Community</h4>
               <a href="#" style={styles.link}>Discord</a>
               <a href="#" style={styles.link}>Twitter</a>
-              <a href="#" style={styles.link}>Telegram</a>
               <a href="#" style={styles.link}>
                 <Github size={12} style={{ marginRight: 4 }} />
                 GitHub
@@ -45,9 +42,9 @@ export default function Footer() {
           </div>
         </div>
 
-        <div style={styles.bottom}>
+        <div className="footer-bottom" style={styles.bottom}>
           <span style={styles.copyright}>
-            © 2025 Chance.Staking. Built on Injective.
+            2025 Chance.Staking. Built on Injective.
           </span>
           <div style={styles.bottomLinks}>
             <a href="#" style={styles.bottomLink}>Terms</a>
@@ -64,9 +61,9 @@ export default function Footer() {
 
 const styles: Record<string, React.CSSProperties> = {
   footer: {
-    borderTop: '1px solid #2F2F2F',
-    padding: '64px 0 32px',
-    marginTop: 80,
+    borderTop: '1px solid #2A2A38',
+    padding: '56px 0 28px',
+    marginTop: 60,
   },
   container: {
     maxWidth: 1280,
@@ -76,49 +73,49 @@ const styles: Record<string, React.CSSProperties> = {
   top: {
     display: 'flex',
     justifyContent: 'space-between',
-    gap: 64,
-    marginBottom: 48,
+    gap: 56,
+    marginBottom: 40,
     flexWrap: 'wrap' as const,
   },
   brand: {
-    maxWidth: 300,
+    maxWidth: 280,
   },
   logoRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 12,
+    gap: 8,
+    marginBottom: 10,
   },
   logoText: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: 800,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
   },
   brandDesc: {
     fontSize: 13,
     lineHeight: 1.7,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
   },
   linksGrid: {
     display: 'flex',
-    gap: 64,
+    gap: 56,
   },
   linkCol: {
     display: 'flex',
     flexDirection: 'column' as const,
-    gap: 10,
+    gap: 9,
   },
   linkTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 700,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.08em',
     marginBottom: 4,
   },
   link: {
     fontSize: 13,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     textDecoration: 'none',
     display: 'flex',
     alignItems: 'center',
@@ -128,25 +125,26 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 24,
-    borderTop: '1px solid #2F2F2F',
+    paddingTop: 20,
+    borderTop: '1px solid #2A2A38',
     flexWrap: 'wrap' as const,
     gap: 16,
   },
   copyright: {
     fontSize: 12,
-    color: '#A3A3A3',
+    color: '#525260',
   },
   bottomLinks: {
     display: 'flex',
-    gap: 24,
+    gap: 20,
   },
   bottomLink: {
     fontSize: 12,
-    color: '#A3A3A3',
+    color: '#525260',
     textDecoration: 'none',
     display: 'flex',
     alignItems: 'center',
     gap: 4,
+    transition: 'color 0.2s',
   },
 }

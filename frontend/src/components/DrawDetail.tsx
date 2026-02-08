@@ -75,7 +75,7 @@ export default function DrawDetail({ drawId }: { drawId: number }) {
 
         {loading && (
           <div style={styles.loadingState}>
-            <Loader size={24} style={{ animation: 'spin 1s linear infinite' }} color="#9E7FFF" />
+            <Loader size={24} style={{ animation: 'spin 1s linear infinite' }} color="#8B6FFF" />
             <span>Loading draw #{drawId}...</span>
           </div>
         )}
@@ -87,14 +87,14 @@ export default function DrawDetail({ drawId }: { drawId: number }) {
         {draw && !loading && (
           <>
             {/* Header */}
-            <div style={styles.drawHeader}>
+            <div className="draw-header" style={styles.drawHeader}>
               <div style={styles.drawHeaderLeft}>
                 <div style={{
                   ...styles.typeBadge,
                   background: draw.draw_type === 'big'
                     ? 'rgba(244, 114, 182, 0.12)'
                     : 'rgba(158, 127, 255, 0.12)',
-                  color: draw.draw_type === 'big' ? '#f472b6' : '#9E7FFF',
+                  color: draw.draw_type === 'big' ? '#f472b6' : '#8B6FFF',
                 }}>
                   {draw.draw_type === 'big' ? 'Big Jackpot' : 'Regular Draw'}
                 </div>
@@ -113,7 +113,7 @@ export default function DrawDetail({ drawId }: { drawId: number }) {
                     ? 'rgba(245, 158, 11, 0.12)'
                     : 'rgba(239, 68, 68, 0.12)',
                 color: draw.status === 'revealed'
-                  ? '#10b981'
+                  ? '#22c55e'
                   : draw.status === 'committed'
                     ? '#f59e0b'
                     : '#ef4444',
@@ -139,7 +139,7 @@ export default function DrawDetail({ drawId }: { drawId: number }) {
             {/* Verification Section */}
             <div style={styles.verifySection}>
               <div style={styles.verifySectionHeader}>
-                <Shield size={18} color="#9E7FFF" />
+                <Shield size={18} color="#8B6FFF" />
                 <h2 style={styles.verifySectionTitle}>Randomness Verification</h2>
               </div>
               <p style={styles.verifyDescription}>
@@ -261,18 +261,18 @@ export default function DrawDetail({ drawId }: { drawId: number }) {
             {/* Draw Metadata */}
             <div style={styles.metaGrid}>
               <div style={styles.metaCard}>
-                <Clock size={16} color="#A3A3A3" />
+                <Clock size={16} color="#8E8EA0" />
                 <div style={styles.metaLabel}>Created</div>
                 <div style={styles.metaValue}>{formatTimestamp(draw.created_at)}</div>
               </div>
               <div style={styles.metaCard}>
-                <Clock size={16} color="#A3A3A3" />
+                <Clock size={16} color="#8E8EA0" />
                 <div style={styles.metaLabel}>Reveal Deadline</div>
                 <div style={styles.metaValue}>{formatTimestamp(draw.reveal_deadline)}</div>
               </div>
               {draw.revealed_at && (
                 <div style={styles.metaCard}>
-                  <Check size={16} color="#10b981" />
+                  <Check size={16} color="#22c55e" />
                   <div style={styles.metaLabel}>Revealed</div>
                   <div style={styles.metaValue}>{formatTimestamp(draw.revealed_at)}</div>
                 </div>
@@ -301,7 +301,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     gap: 8,
     background: 'transparent',
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     fontSize: 14,
     fontWeight: 500,
     border: 'none',
@@ -316,7 +316,7 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'center',
     gap: 12,
     padding: '80px 24px',
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     fontSize: 16,
   },
   errorState: {
@@ -353,12 +353,12 @@ const styles: Record<string, React.CSSProperties> = {
   drawTitle: {
     fontSize: 36,
     fontWeight: 800,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     letterSpacing: '-0.03em',
   },
   drawTime: {
     fontSize: 14,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
   },
   statusBadge: {
     padding: '8px 16px',
@@ -390,20 +390,20 @@ const styles: Record<string, React.CSSProperties> = {
   winnerAddress: {
     fontSize: 16,
     fontWeight: 600,
-    color: '#FFFFFF',
-    fontFamily: 'monospace',
+    color: '#F0F0F5',
+    fontFamily: "'JetBrains Mono', monospace",
     wordBreak: 'break-all' as const,
     marginBottom: 8,
   },
   winnerReward: {
     fontSize: 28,
     fontWeight: 800,
-    color: '#10b981',
+    color: '#22c55e',
     letterSpacing: '-0.02em',
   },
   verifySection: {
-    background: '#262626',
-    border: '1px solid #2F2F2F',
+    background: '#1A1A22',
+    border: '1px solid #2A2A38',
     borderRadius: 20,
     padding: 28,
     marginBottom: 24,
@@ -418,11 +418,11 @@ const styles: Record<string, React.CSSProperties> = {
   verifySectionTitle: {
     fontSize: 20,
     fontWeight: 700,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
   },
   verifyDescription: {
     fontSize: 14,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     lineHeight: 1.6,
     marginBottom: 24,
   },
@@ -430,14 +430,14 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     gap: 16,
     padding: '20px 0',
-    borderTop: '1px solid #2F2F2F',
+    borderTop: '1px solid #2A2A38',
   },
   stepNumber: {
     width: 28,
     height: 28,
     borderRadius: '50%',
     background: 'rgba(158, 127, 255, 0.12)',
-    color: '#9E7FFF',
+    color: '#8B6FFF',
     fontSize: 13,
     fontWeight: 700,
     display: 'flex',
@@ -455,12 +455,12 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     fontSize: 15,
     fontWeight: 600,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     marginBottom: 4,
   },
   stepDescription: {
     fontSize: 13,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     marginBottom: 10,
     lineHeight: 1.5,
   },
@@ -468,22 +468,22 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    background: '#1a1a1a',
+    background: '#0F0F13',
     borderRadius: 10,
     padding: '10px 14px',
     marginBottom: 8,
   },
   hexValue: {
     fontSize: 13,
-    fontFamily: 'monospace',
-    color: '#9E7FFF',
+    fontFamily: "'JetBrains Mono', monospace",
+    color: '#8B6FFF',
     flex: 1,
     wordBreak: 'break-all' as const,
   },
   copyBtn: {
     background: 'transparent',
     border: 'none',
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     cursor: 'pointer',
     padding: 4,
     borderRadius: 4,
@@ -508,7 +508,7 @@ const styles: Record<string, React.CSSProperties> = {
     textDecoration: 'none',
   },
   computationCard: {
-    background: '#1a1a1a',
+    background: '#0F0F13',
     borderRadius: 14,
     padding: 20,
     marginTop: 20,
@@ -516,7 +516,7 @@ const styles: Record<string, React.CSSProperties> = {
   computationTitle: {
     fontSize: 14,
     fontWeight: 700,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     marginBottom: 14,
   },
   computationRow: {
@@ -528,13 +528,13 @@ const styles: Record<string, React.CSSProperties> = {
   },
   computationLabel: {
     fontSize: 13,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
   },
   computationValue: {
     fontSize: 13,
     fontWeight: 600,
-    color: '#FFFFFF',
-    fontFamily: 'monospace',
+    color: '#F0F0F5',
+    fontFamily: "'JetBrains Mono', monospace",
   },
   metaGrid: {
     display: 'grid',
@@ -543,8 +543,8 @@ const styles: Record<string, React.CSSProperties> = {
     animation: 'fadeInUp 0.7s ease-out',
   },
   metaCard: {
-    background: '#262626',
-    border: '1px solid #2F2F2F',
+    background: '#1A1A22',
+    border: '1px solid #2A2A38',
     borderRadius: 14,
     padding: '16px 20px',
     display: 'flex',
@@ -553,12 +553,12 @@ const styles: Record<string, React.CSSProperties> = {
   },
   metaLabel: {
     fontSize: 12,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     fontWeight: 500,
   },
   metaValue: {
     fontSize: 14,
     fontWeight: 600,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
   },
 }

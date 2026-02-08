@@ -15,12 +15,12 @@ interface Particle {
 }
 
 const COLORS = [
-  '#9E7FFF', '#B9A4FF', '#7B5CE0',  // purple
+  '#8B6FFF', '#A78BFF', '#6B4FD6',  // purple
   '#38bdf8', '#0ea5e9',              // cyan
   '#f472b6', '#ec4899',              // pink
   '#f59e0b', '#fbbf24',              // gold
-  '#10b981', '#34d399',              // green
-  '#FFFFFF',                          // white
+  '#22c55e', '#4ade80',              // green
+  '#F0F0F5',                          // white
 ]
 
 export default function Confetti() {
