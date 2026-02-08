@@ -3,7 +3,7 @@ import { X, Trophy, Info, AlertTriangle } from 'lucide-react'
 import { useStore, type Toast as ToastType } from '../store/useStore'
 
 const iconMap = {
-  success: <Trophy size={18} color="#10b981" />,
+  success: <Trophy size={18} color="#22c55e" />,
   info: <Info size={18} color="#38bdf8" />,
   warning: <AlertTriangle size={18} color="#f59e0b" />,
 }
@@ -93,19 +93,19 @@ const styles: Record<string, React.CSSProperties> = {
   toastTitle: {
     fontSize: 14,
     fontWeight: 700,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     marginBottom: 2,
   },
   toastMessage: {
     fontSize: 12,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     lineHeight: 1.4,
   },
   toastClose: {
     flexShrink: 0,
     background: 'transparent',
     border: 'none',
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     cursor: 'pointer',
     padding: 4,
     borderRadius: 6,

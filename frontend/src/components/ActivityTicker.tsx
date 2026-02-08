@@ -46,15 +46,15 @@ export default function ActivityTicker() {
                   ...styles.icon,
                   background: isBig
                     ? 'rgba(244, 114, 182, 0.15)'
-                    : 'rgba(158, 127, 255, 0.15)',
+                    : 'rgba(139, 111, 255, 0.15)',
                 }}>
-                  <Trophy size={12} color={isBig ? '#f472b6' : '#9E7FFF'} />
+                  <Trophy size={12} color={isBig ? '#f472b6' : '#8B6FFF'} />
                 </div>
                 <span style={styles.address}>{truncateAddr(draw.winner!)}</span>
                 <span style={styles.won}>won</span>
                 <span style={{
                   ...styles.amount,
-                  color: isBig ? '#f472b6' : '#10b981',
+                  color: isBig ? '#f472b6' : '#22c55e',
                 }}>
                   {formatInj(draw.reward_amount)} INJ
                 </span>
@@ -78,8 +78,8 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 24,
     overflow: 'hidden',
     borderRadius: 12,
-    background: 'rgba(26, 26, 26, 0.6)',
-    border: '1px solid rgba(47, 47, 47, 0.4)',
+    background: 'rgba(26, 26, 34, 0.6)',
+    border: '1px solid rgba(42, 42, 56, 0.4)',
     padding: '10px 0',
   },
   trackContainer: {
@@ -112,12 +112,12 @@ const styles: Record<string, React.CSSProperties> = {
   address: {
     fontSize: 12,
     fontWeight: 600,
-    color: '#FFFFFF',
-    fontFamily: 'monospace',
+    color: '#F0F0F5',
+    fontFamily: "'JetBrains Mono', monospace",
   },
   won: {
     fontSize: 12,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
   },
   amount: {
     fontSize: 12,

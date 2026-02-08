@@ -31,26 +31,24 @@ export default function DrawsSection() {
     ? recentDraws
     : recentDraws.filter((d) => d.draw_type === filter)
 
-  // Sort by time descending (newest first)
   const sorted = [...filtered].sort((a, b) => {
     const timeA = parseInt(a.revealed_at || a.created_at)
     const timeB = parseInt(b.revealed_at || b.created_at)
     return timeB - timeA
   })
 
-  // Split into committed (live) and revealed draws
   const committedDraws = sorted.filter((d) => d.status === 'committed')
   const revealedDraws = sorted.filter((d) => d.status === 'revealed')
 
   return (
     <section id="draws" style={styles.section}>
-      <div style={styles.container}>
+      <div className="section-container" style={styles.container}>
         <div style={styles.sectionHeader}>
           <div style={styles.sectionBadge}>
-            <Trophy size={14} color="#f59e0b" />
+            <Trophy size={13} color="#f59e0b" />
             <span>Live Draws</span>
           </div>
-          <h2 style={styles.sectionTitle}>Recent Winners</h2>
+          <h2 className="draws-section-title" style={styles.sectionTitle}>Recent Winners</h2>
           <p style={styles.sectionSubtitle}>
             Every draw is verifiable on-chain using drand beacons and Merkle proofs.
             Click any draw to verify.
@@ -58,11 +56,11 @@ export default function DrawsSection() {
         </div>
 
         {/* Pool status cards */}
-        <div style={styles.poolGrid}>
+        <div className="draws-pool-grid" style={styles.poolGrid}>
           <div style={styles.poolCard}>
             <div style={styles.poolHeader}>
-              <div style={{ ...styles.poolIcon, background: 'rgba(158, 127, 255, 0.12)' }}>
-                <Coins size={20} color="#9E7FFF" />
+              <div style={{ ...styles.poolIcon, background: 'rgba(139, 111, 255, 0.1)' }}>
+                <Coins size={18} color="#8B6FFF" />
               </div>
               <div>
                 <div style={styles.poolLabel}>Regular Pool</div>
@@ -71,10 +69,10 @@ export default function DrawsSection() {
             </div>
             <div style={styles.poolMeta}>
               <span style={styles.poolMetaItem}>
-                <Clock size={12} /> Draws every epoch
+                <Clock size={11} /> Draws every epoch
               </span>
               <span style={styles.poolMetaItem}>
-                <Users size={12} /> Weighted by balance
+                <Users size={11} /> Weighted by balance
               </span>
             </div>
             <div style={styles.poolProgress}>
@@ -84,8 +82,8 @@ export default function DrawsSection() {
 
           <div style={styles.poolCard}>
             <div style={styles.poolHeader}>
-              <div style={{ ...styles.poolIcon, background: 'rgba(244, 114, 182, 0.12)' }}>
-                <Gift size={20} color="#f472b6" />
+              <div style={{ ...styles.poolIcon, background: 'rgba(244, 114, 182, 0.1)' }}>
+                <Gift size={18} color="#f472b6" />
               </div>
               <div>
                 <div style={styles.poolLabel}>Big Jackpot Pool</div>
@@ -94,10 +92,10 @@ export default function DrawsSection() {
             </div>
             <div style={styles.poolMeta}>
               <span style={styles.poolMetaItem}>
-                <Clock size={12} /> Monthly draws
+                <Clock size={11} /> Monthly draws
               </span>
               <span style={styles.poolMetaItem}>
-                <Users size={12} /> Equal odds
+                <Users size={11} /> Equal odds
               </span>
             </div>
             <div style={styles.poolProgress}>
@@ -148,16 +146,18 @@ export default function DrawsSection() {
                     animationDelay: `${i * 0.05}s`,
                   }}
                   onClick={() => selectDraw(draw.id)}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(245, 158, 11, 0.25)' }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(245, 158, 11, 0.12)' }}
                 >
                   <div style={styles.drawLeft}>
                     <div style={{
                       ...styles.drawTypeBadge,
                       background: draw.draw_type === 'big'
-                        ? 'rgba(244, 114, 182, 0.12)'
-                        : 'rgba(158, 127, 255, 0.12)',
-                      color: draw.draw_type === 'big' ? '#f472b6' : '#9E7FFF',
+                        ? 'rgba(244, 114, 182, 0.1)'
+                        : 'rgba(139, 111, 255, 0.1)',
+                      color: draw.draw_type === 'big' ? '#f472b6' : '#8B6FFF',
                     }}>
-                      <Radio size={12} style={{ animation: 'pulse 2s ease-in-out infinite' }} />
+                      <Radio size={11} style={{ animation: 'pulse 2s ease-in-out infinite' }} />
                       #{draw.id}
                     </div>
                     <div style={styles.drawInfo}>
@@ -173,7 +173,7 @@ export default function DrawsSection() {
                     <div style={{ ...styles.drawReward, color: '#f59e0b' }}>
                       {formatInj(draw.reward_amount)} INJ
                     </div>
-                    <ChevronRight size={16} color="#A3A3A3" />
+                    <ChevronRight size={14} color="#8E8EA0" />
                   </div>
                 </div>
               ))}
@@ -181,8 +181,8 @@ export default function DrawsSection() {
           </div>
         )}
 
-        {/* Revealed draws list */}
-        <div style={styles.drawsList}>
+        {/* Revealed draws list - scrollable */}
+        <div style={styles.drawsListScrollable}>
           {revealedDraws.length === 0 && committedDraws.length === 0 && (
             <div style={styles.emptyState}>
               No draws yet. Draws appear here once the first epoch completes.
@@ -196,14 +196,16 @@ export default function DrawsSection() {
                 animationDelay: `${i * 0.05}s`,
               }}
               onClick={() => selectDraw(draw.id)}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = '#2A2A38' }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'transparent' }}
             >
               <div style={styles.drawLeft}>
                 <div style={{
                   ...styles.drawTypeBadge,
                   background: draw.draw_type === 'big'
-                    ? 'rgba(244, 114, 182, 0.12)'
-                    : 'rgba(158, 127, 255, 0.12)',
-                  color: draw.draw_type === 'big' ? '#f472b6' : '#9E7FFF',
+                    ? 'rgba(244, 114, 182, 0.1)'
+                    : 'rgba(139, 111, 255, 0.1)',
+                  color: draw.draw_type === 'big' ? '#f472b6' : '#8B6FFF',
                 }}>
                   {draw.draw_type === 'big' ? '🏆' : '✨'} #{draw.id}
                 </div>
@@ -219,11 +221,11 @@ export default function DrawsSection() {
               <div style={styles.drawRight}>
                 <div style={{
                   ...styles.drawReward,
-                  color: draw.draw_type === 'big' ? '#f472b6' : '#10b981',
+                  color: draw.draw_type === 'big' ? '#f472b6' : '#22c55e',
                 }}>
                   +{formatInj(draw.reward_amount)} INJ
                 </div>
-                <ChevronRight size={16} color="#A3A3A3" />
+                <ChevronRight size={14} color="#8E8EA0" />
               </div>
             </div>
           ))}
@@ -244,132 +246,132 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sectionHeader: {
     textAlign: 'center' as const,
-    marginBottom: 48,
+    marginBottom: 40,
   },
   sectionBadge: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: 8,
-    padding: '6px 14px',
+    gap: 7,
+    padding: '5px 13px',
     borderRadius: 9999,
-    background: 'rgba(245, 158, 11, 0.1)',
-    border: '1px solid rgba(245, 158, 11, 0.2)',
-    fontSize: 12,
+    background: 'rgba(245, 158, 11, 0.08)',
+    border: '1px solid rgba(245, 158, 11, 0.15)',
+    fontSize: 11,
     fontWeight: 600,
     color: '#f59e0b',
-    marginBottom: 16,
+    marginBottom: 14,
     textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
+    letterSpacing: '0.06em',
   },
   sectionTitle: {
-    fontSize: 42,
+    fontSize: 38,
     fontWeight: 800,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     letterSpacing: '-0.03em',
-    marginBottom: 12,
+    marginBottom: 10,
   },
   sectionSubtitle: {
-    fontSize: 16,
-    color: '#A3A3A3',
-    maxWidth: 480,
+    fontSize: 15,
+    color: '#8E8EA0',
+    maxWidth: 460,
     margin: '0 auto',
   },
   poolGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
-    gap: 20,
-    marginBottom: 40,
+    gap: 16,
+    marginBottom: 32,
   },
   poolCard: {
-    background: '#262626',
-    border: '1px solid #2F2F2F',
-    borderRadius: 20,
-    padding: 24,
+    background: '#1A1A22',
+    border: '1px solid #2A2A38',
+    borderRadius: 16,
+    padding: 20,
   },
   poolHeader: {
     display: 'flex',
     alignItems: 'center',
-    gap: 16,
-    marginBottom: 16,
+    gap: 14,
+    marginBottom: 14,
   },
   poolIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 42,
+    height: 42,
+    borderRadius: 12,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
   poolLabel: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 500,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     marginBottom: 2,
   },
   poolValue: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 800,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     letterSpacing: '-0.02em',
   },
   poolMeta: {
     display: 'flex',
-    gap: 16,
-    marginBottom: 16,
+    gap: 14,
+    marginBottom: 14,
   },
   poolMetaItem: {
     display: 'flex',
     alignItems: 'center',
-    gap: 6,
-    fontSize: 12,
-    color: '#A3A3A3',
+    gap: 5,
+    fontSize: 11,
+    color: '#8E8EA0',
   },
   poolProgress: {
-    height: 4,
+    height: 3,
     borderRadius: 2,
-    background: '#1a1a1a',
+    background: '#0F0F13',
     overflow: 'hidden',
   },
   poolProgressBar: {
     height: '100%',
     borderRadius: 2,
-    background: 'linear-gradient(90deg, #9E7FFF, #7B5CE0)',
+    background: 'linear-gradient(90deg, #8B6FFF, #6B4FD6)',
     transition: 'width 0.5s ease',
   },
   filterRow: {
     display: 'flex',
-    gap: 8,
-    marginBottom: 24,
+    gap: 6,
+    marginBottom: 20,
   },
   filterTab: {
-    padding: '8px 18px',
-    borderRadius: 10,
+    padding: '7px 16px',
+    borderRadius: 8,
     background: 'transparent',
-    color: '#A3A3A3',
-    fontSize: 13,
+    color: '#8E8EA0',
+    fontSize: 12,
     fontWeight: 600,
     border: '1px solid transparent',
     cursor: 'pointer',
     transition: 'all 0.2s',
   },
   filterTabActive: {
-    background: 'rgba(158, 127, 255, 0.1)',
-    color: '#9E7FFF',
-    border: '1px solid rgba(158, 127, 255, 0.2)',
+    background: 'rgba(139, 111, 255, 0.08)',
+    color: '#8B6FFF',
+    border: '1px solid rgba(139, 111, 255, 0.15)',
   },
   liveSection: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   liveSectionHeader: {
     display: 'flex',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 12,
+    marginBottom: 10,
   },
   liveIndicator: {
     position: 'relative' as const,
-    width: 10,
-    height: 10,
+    width: 9,
+    height: 9,
   },
   livePulse: {
     position: 'absolute' as const,
@@ -379,83 +381,96 @@ const styles: Record<string, React.CSSProperties> = {
   },
   livePulseRing: {
     position: 'absolute' as const,
-    inset: -4,
+    inset: -3,
     borderRadius: '50%',
     border: '2px solid #f59e0b',
     opacity: 0.4,
     animation: 'pulse 2s ease-in-out infinite',
   },
   liveSectionTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: 600,
     color: '#f59e0b',
     textTransform: 'uppercase' as const,
-    letterSpacing: '0.05em',
+    letterSpacing: '0.06em',
   },
   drawsList: {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: 4,
   },
+  drawsListScrollable: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 4,
+    maxHeight: 420,
+    overflowY: 'auto' as const,
+    paddingRight: 4,
+  },
   emptyState: {
     textAlign: 'center' as const,
-    padding: '48px 24px',
-    color: '#A3A3A3',
-    fontSize: 14,
+    padding: '40px 24px',
+    color: '#8E8EA0',
+    fontSize: 13,
   },
   drawRow: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '16px 20px',
-    borderRadius: 14,
-    background: '#262626',
+    padding: '14px 18px',
+    borderRadius: 12,
+    background: '#1A1A22',
     border: '1px solid transparent',
     transition: 'all 0.2s',
     cursor: 'pointer',
     animation: 'fadeInUp 0.4s ease-out both',
   },
   drawRowCommitted: {
-    border: '1px solid rgba(245, 158, 11, 0.15)',
-    background: 'linear-gradient(135deg, rgba(38, 38, 38, 1), rgba(245, 158, 11, 0.03))',
+    border: '1px solid rgba(245, 158, 11, 0.12)',
+    background: 'linear-gradient(135deg, rgba(26, 26, 34, 1), rgba(245, 158, 11, 0.02))',
   },
   drawLeft: {
     display: 'flex',
     alignItems: 'center',
-    gap: 16,
+    gap: 14,
+    minWidth: 0,
   },
   drawTypeBadge: {
     display: 'flex',
     alignItems: 'center',
-    gap: 6,
-    padding: '6px 12px',
-    borderRadius: 8,
-    fontSize: 12,
+    gap: 5,
+    padding: '5px 10px',
+    borderRadius: 7,
+    fontSize: 11,
     fontWeight: 700,
     whiteSpace: 'nowrap' as const,
+    flexShrink: 0,
   },
   drawInfo: {
     display: 'flex',
     flexDirection: 'column' as const,
     gap: 2,
+    minWidth: 0,
   },
   drawWinner: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 600,
-    color: '#FFFFFF',
-    fontFamily: 'monospace',
+    color: '#F0F0F5',
+    fontFamily: "'JetBrains Mono', monospace",
   },
   drawMeta: {
-    fontSize: 12,
-    color: '#A3A3A3',
+    fontSize: 11,
+    color: '#8E8EA0',
   },
   drawRight: {
     display: 'flex',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
+    flexShrink: 0,
   },
   drawReward: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: 700,
+    fontVariantNumeric: 'tabular-nums',
   },
 }

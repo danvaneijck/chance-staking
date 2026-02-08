@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Sparkles, ChevronDown, Wallet, LogOut, Copy, Check } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import type { WalletType } from '../store/useStore'
@@ -8,6 +8,8 @@ export default function Header() {
   const [showWalletMenu, setShowWalletMenu] = useState(false)
   const [showAccountMenu, setShowAccountMenu] = useState(false)
   const [copied, setCopied] = useState(false)
+  const walletRef = useRef<HTMLDivElement>(null)
+  const accountRef = useRef<HTMLDivElement>(null)
 
   const truncateAddress = (addr: string) => {
     if (!addr) return ''
@@ -20,6 +22,16 @@ export default function Header() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (walletRef.current && !walletRef.current.contains(e.target as Node)) setShowWalletMenu(false)
+      if (accountRef.current && !accountRef.current.contains(e.target as Node)) setShowAccountMenu(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
   const wallets: { id: WalletType; name: string; icon: string }[] = [
     { id: 'keplr', name: 'Keplr', icon: '🔑' },
     { id: 'leap', name: 'Leap', icon: '🦘' },
@@ -29,34 +41,37 @@ export default function Header() {
 
   return (
     <header style={styles.header}>
-      <div style={styles.headerInner}>
-        <div style={styles.logoSection}>
-          <div style={styles.logoIcon}>
-            <Sparkles size={24} color="#9E7FFF" />
+      <div className="header-inner" style={styles.headerInner}>
+        <a href="#" style={{ textDecoration: 'none' }}>
+          <div style={styles.logoSection}>
+            <div style={styles.logoIcon}>
+              <Sparkles size={22} color="#8B6FFF" />
+            </div>
+            <div style={styles.logoText}>
+              <span style={styles.logoName}>Chance</span>
+              <span style={styles.logoDot}>.</span>
+              <span style={styles.logoSuffix}>Staking</span>
+            </div>
           </div>
-          <div style={styles.logoText}>
-            <span style={styles.logoName}>Chance</span>
-            <span style={styles.logoDot}>.</span>
-            <span style={styles.logoSuffix}>Staking</span>
-          </div>
-        </div>
+        </a>
 
-        <nav style={styles.nav}>
+        <nav className="header-nav" style={styles.nav}>
           <a href="#stake" style={styles.navLink}>Stake</a>
           <a href="#draws" style={styles.navLink}>Draws</a>
+          <a href="#how-it-works" style={styles.navLink}>How It Works</a>
           {isConnected && <a href="#portfolio" style={styles.navLink}>Portfolio</a>}
         </nav>
 
         <div style={styles.walletSection}>
           {!isConnected ? (
-            <div style={{ position: 'relative' }}>
+            <div ref={walletRef} style={{ position: 'relative' }}>
               <button
                 style={styles.connectButton}
                 onClick={() => setShowWalletMenu(!showWalletMenu)}
                 disabled={isConnecting}
               >
-                <Wallet size={18} />
-                <span>{isConnecting ? 'Connecting...' : 'Connect Wallet'}</span>
+                <Wallet size={16} />
+                <span>{isConnecting ? 'Connecting...' : 'Connect'}</span>
               </button>
               {showWalletMenu && (
                 <div style={styles.walletDropdown}>
@@ -68,6 +83,12 @@ export default function Header() {
                         connect(w.id)
                         setShowWalletMenu(false)
                       }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = 'rgba(139, 111, 255, 0.08)'
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.background = 'transparent'
+                      }}
                     >
                       <span style={styles.walletIcon}>{w.icon}</span>
                       <span>{w.name}</span>
@@ -77,14 +98,19 @@ export default function Header() {
               )}
             </div>
           ) : (
-            <div style={{ position: 'relative' }}>
+            <div ref={accountRef} style={{ position: 'relative' }}>
               <button
                 style={styles.accountButton}
                 onClick={() => setShowAccountMenu(!showAccountMenu)}
               >
                 <div style={styles.accountDot} />
-                <span>{truncateAddress(injectiveAddress || address)}</span>
-                <ChevronDown size={14} />
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }}>
+                  {truncateAddress(injectiveAddress || address)}
+                </span>
+                <ChevronDown size={14} style={{
+                  transition: 'transform 0.2s',
+                  transform: showAccountMenu ? 'rotate(180deg)' : 'rotate(0)',
+                }} />
               </button>
               {showAccountMenu && (
                 <div style={styles.accountDropdown}>
@@ -94,14 +120,24 @@ export default function Header() {
                       {truncateAddress(injectiveAddress || address)}
                     </span>
                   </div>
-                  <button style={styles.accountAction} onClick={copyAddress}>
-                    {copied ? <Check size={14} /> : <Copy size={14} />}
+                  <button
+                    style={styles.accountAction}
+                    onClick={copyAddress}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(139, 111, 255, 0.06)' }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                  >
+                    {copied ? <Check size={14} color="#22c55e" /> : <Copy size={14} />}
                     <span>{copied ? 'Copied!' : 'Copy Address'}</span>
                   </button>
-                  <button style={styles.accountAction} onClick={() => {
-                    disconnect()
-                    setShowAccountMenu(false)
-                  }}>
+                  <button
+                    style={{ ...styles.accountAction, color: '#ef4444' }}
+                    onClick={() => {
+                      disconnect()
+                      setShowAccountMenu(false)
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239, 68, 68, 0.06)' }}
+                    onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                  >
                     <LogOut size={14} />
                     <span>Disconnect</span>
                   </button>
@@ -122,15 +158,15 @@ const styles: Record<string, React.CSSProperties> = {
     left: 0,
     right: 0,
     zIndex: 100,
-    background: 'rgba(23, 23, 23, 0.85)',
-    backdropFilter: 'blur(20px)',
-    borderBottom: '1px solid rgba(47, 47, 47, 0.6)',
+    background: 'rgba(15, 15, 19, 0.8)',
+    backdropFilter: 'blur(24px)',
+    borderBottom: '1px solid rgba(42, 42, 56, 0.5)',
   },
   headerInner: {
     maxWidth: 1280,
     margin: '0 auto',
     padding: '0 24px',
-    height: 72,
+    height: 64,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -138,13 +174,13 @@ const styles: Record<string, React.CSSProperties> = {
   logoSection: {
     display: 'flex',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   logoIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    background: 'rgba(158, 127, 255, 0.12)',
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    background: 'rgba(139, 111, 255, 0.1)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -155,30 +191,30 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 0,
   },
   logoName: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 800,
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     letterSpacing: '-0.02em',
   },
   logoDot: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 800,
-    color: '#9E7FFF',
+    color: '#8B6FFF',
   },
   logoSuffix: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: 500,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     letterSpacing: '-0.02em',
   },
   nav: {
     display: 'flex',
-    gap: 32,
+    gap: 28,
   },
   navLink: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 500,
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     textDecoration: 'none',
     transition: 'color 0.2s',
     letterSpacing: '0.01em',
@@ -190,38 +226,39 @@ const styles: Record<string, React.CSSProperties> = {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    padding: '10px 20px',
-    borderRadius: 12,
-    background: 'linear-gradient(135deg, #9E7FFF, #7B5CE0)',
+    padding: '9px 20px',
+    borderRadius: 10,
+    background: 'linear-gradient(135deg, #8B6FFF, #6B4FD6)',
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 600,
     border: 'none',
     cursor: 'pointer',
     transition: 'all 0.2s',
-    boxShadow: '0 0 20px rgba(158, 127, 255, 0.2)',
+    boxShadow: '0 0 20px rgba(139, 111, 255, 0.15)',
   },
   walletDropdown: {
     position: 'absolute' as const,
     top: 'calc(100% + 8px)',
     right: 0,
-    background: '#262626',
-    border: '1px solid #2F2F2F',
-    borderRadius: 16,
-    padding: 8,
+    background: '#1A1A22',
+    border: '1px solid #2A2A38',
+    borderRadius: 14,
+    padding: 6,
     minWidth: 200,
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+    boxShadow: '0 12px 40px rgba(0, 0, 0, 0.6)',
     zIndex: 200,
+    animation: 'scaleIn 0.15s ease-out',
   },
   walletOption: {
     display: 'flex',
     alignItems: 'center',
     gap: 12,
     width: '100%',
-    padding: '12px 16px',
-    borderRadius: 12,
+    padding: '11px 14px',
+    borderRadius: 10,
     background: 'transparent',
-    color: '#FFFFFF',
+    color: '#F0F0F5',
     fontSize: 14,
     fontWeight: 500,
     border: 'none',
@@ -229,67 +266,71 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'background 0.15s',
   },
   walletIcon: {
-    fontSize: 20,
+    fontSize: 18,
   },
   accountButton: {
     display: 'flex',
     alignItems: 'center',
     gap: 8,
-    padding: '10px 16px',
-    borderRadius: 12,
-    background: '#262626',
-    border: '1px solid #2F2F2F',
-    color: '#FFFFFF',
-    fontSize: 14,
+    padding: '9px 14px',
+    borderRadius: 10,
+    background: '#1A1A22',
+    border: '1px solid #2A2A38',
+    color: '#F0F0F5',
+    fontSize: 13,
     fontWeight: 500,
     cursor: 'pointer',
+    transition: 'border-color 0.2s',
   },
   accountDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: '50%',
-    background: '#10b981',
+    background: '#22c55e',
+    boxShadow: '0 0 8px rgba(34, 197, 94, 0.4)',
   },
   accountDropdown: {
     position: 'absolute' as const,
     top: 'calc(100% + 8px)',
     right: 0,
-    background: '#262626',
-    border: '1px solid #2F2F2F',
-    borderRadius: 16,
-    padding: 8,
+    background: '#1A1A22',
+    border: '1px solid #2A2A38',
+    borderRadius: 14,
+    padding: 6,
     minWidth: 240,
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+    boxShadow: '0 12px 40px rgba(0, 0, 0, 0.6)',
     zIndex: 200,
+    animation: 'scaleIn 0.15s ease-out',
   },
   accountInfo: {
-    padding: '12px 16px',
-    borderBottom: '1px solid #2F2F2F',
+    padding: '12px 14px',
+    borderBottom: '1px solid #2A2A38',
     marginBottom: 4,
     display: 'flex',
     flexDirection: 'column' as const,
     gap: 4,
   },
   accountLabel: {
-    fontSize: 12,
-    color: '#A3A3A3',
+    fontSize: 11,
+    color: '#8E8EA0',
     textTransform: 'capitalize' as const,
+    letterSpacing: '0.02em',
   },
   accountAddr: {
     fontSize: 13,
     fontWeight: 600,
-    color: '#FFFFFF',
-    fontFamily: 'monospace',
+    color: '#F0F0F5',
+    fontFamily: "'JetBrains Mono', monospace",
   },
   accountAction: {
     display: 'flex',
     alignItems: 'center',
     gap: 10,
     width: '100%',
-    padding: '10px 16px',
-    borderRadius: 10,
+    padding: '10px 14px',
+    borderRadius: 8,
     background: 'transparent',
-    color: '#A3A3A3',
+    color: '#8E8EA0',
     fontSize: 13,
     fontWeight: 500,
     border: 'none',
