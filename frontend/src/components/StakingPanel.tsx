@@ -2,11 +2,7 @@ import React, { useState } from 'react'
 import { ArrowDownUp, TrendingUp, Clock, Shield, Loader } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { INJ_DECIMALS } from '../config'
-
-function formatBalance(raw: string): string {
-  const n = parseFloat(raw) / 10 ** INJ_DECIMALS
-  return n.toFixed(4)
-}
+import { formatInjString, formatNumber } from '../utils/formatNumber'
 
 function toRawAmount(human: string): string {
   const n = parseFloat(human)
@@ -32,13 +28,11 @@ export default function StakingPanel() {
 
   const rate = parseFloat(exchangeRate) || 1
   const outputAmount = amount
-    ? mode === 'stake'
-      ? (parseFloat(amount) / rate).toFixed(6)
-      : (parseFloat(amount) * rate).toFixed(6)
-    : '0.000000'
+    ? formatNumber(mode === 'stake' ? parseFloat(amount) / rate : parseFloat(amount) * rate, 4)
+    : '0'
 
   const balance = mode === 'stake' ? injBalance : csinjBalance
-  const formattedBalance = formatBalance(balance)
+  const formattedBalance = formatInjString(balance)
 
   const handleMax = () => {
     setAmount(formattedBalance)
@@ -152,7 +146,7 @@ export default function StakingPanel() {
               <div style={styles.rateInfo}>
                 <div style={styles.rateRow}>
                   <span style={styles.rateLabel}>Exchange Rate</span>
-                  <span style={styles.rateValue}>1 csINJ = {rate.toFixed(6)} INJ</span>
+                  <span style={styles.rateValue}>1 csINJ = {formatNumber(rate, 4)} INJ</span>
                 </div>
                 <div style={styles.rateRow}>
                   <span style={styles.rateLabel}>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Clock, Trophy, Download, Loader, Target } from 'lucide-react'
 import { useStore } from '../store/useStore'
-import { formatInj } from '../utils/formatNumber'
+import { formatInj, formatNumber } from '../utils/formatNumber'
 
 function formatTimestamp(nanos: string): string {
   const ms = parseInt(nanos) / 1e6
@@ -115,8 +115,8 @@ export default function PortfolioSection() {
                   <div style={styles.oddsMain}>
                     <div style={styles.oddsPercent}>
                       {parseFloat(snapshotTotalWeight) > 0
-                        ? ((parseFloat(csinjBalance) / parseFloat(snapshotTotalWeight)) * 100).toFixed(4)
-                        : '0.0000'}%
+                        ? formatNumber((parseFloat(csinjBalance) / parseFloat(snapshotTotalWeight)) * 100, 4)
+                        : '0'}%
                     </div>
                     <div style={styles.oddsLabel}>Regular Draw</div>
                     <div style={styles.oddsDetail}>
@@ -127,8 +127,8 @@ export default function PortfolioSection() {
                   <div style={styles.oddsMain}>
                     <div style={styles.oddsPercent}>
                       {snapshotNumHolders > 0
-                        ? (100 / snapshotNumHolders).toFixed(4)
-                        : '0.0000'}%
+                        ? formatNumber(100 / snapshotNumHolders, 4)
+                        : '0'}%
                     </div>
                     <div style={styles.oddsLabel}>Big Jackpot</div>
                     <div style={styles.oddsDetail}>
