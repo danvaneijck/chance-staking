@@ -5,8 +5,10 @@ import HeroSection from './components/HeroSection'
 import StakingPanel from './components/StakingPanel'
 import PortfolioSection from './components/PortfolioSection'
 import DrawsSection from './components/DrawsSection'
+import DrawDetail from './components/DrawDetail'
 import HowItWorks from './components/HowItWorks'
 import Footer from './components/Footer'
+import ToastContainer from './components/Toast'
 
 function App() {
   const isConnected = useStore((s) => s.isConnected)
@@ -16,6 +18,8 @@ function App() {
   const fetchDraws = useStore((s) => s.fetchDraws)
   const fetchBalances = useStore((s) => s.fetchBalances)
   const fetchUserData = useStore((s) => s.fetchUserData)
+  const selectedDrawId = useStore((s) => s.selectedDrawId)
+  const selectDraw = useStore((s) => s.selectDraw)
 
   // On mount: fetch global contract data + draws
   useEffect(() => {
@@ -51,17 +55,42 @@ function App() {
     return () => clearInterval(interval)
   }, [isConnected])
 
+  // Handle hash-based routing for draw detail pages
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash
+      const match = hash.match(/^#draw\/(\d+)$/)
+      if (match) {
+        selectDraw(parseInt(match[1]))
+      } else if (selectedDrawId !== null && !hash.startsWith('#draw/')) {
+        // Only clear if we're navigating away from a draw page
+        useStore.setState({ selectedDrawId: null })
+      }
+    }
+
+    handleHashChange() // Check on mount
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
+
   return (
     <div style={{ minHeight: '100vh' }}>
       <Header />
+      <ToastContainer />
 
-      <main>
-        <HeroSection />
-        <StakingPanel />
-        {isConnected && <PortfolioSection />}
-        <DrawsSection />
-        <HowItWorks />
-      </main>
+      {selectedDrawId !== null ? (
+        <main>
+          <DrawDetail drawId={selectedDrawId} />
+        </main>
+      ) : (
+        <main>
+          <HeroSection />
+          <StakingPanel />
+          {isConnected && <PortfolioSection />}
+          <DrawsSection />
+          <HowItWorks />
+        </main>
+      )}
 
       <Footer />
     </div>

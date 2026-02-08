@@ -1,12 +1,7 @@
 import React, { useState } from 'react'
 import { Clock, Trophy, Download, Loader } from 'lucide-react'
 import { useStore } from '../store/useStore'
-import { INJ_DECIMALS } from '../config'
-
-function formatInj(raw: string): string {
-  const n = parseFloat(raw) / 10 ** INJ_DECIMALS
-  return n.toFixed(4)
-}
+import { formatInj } from '../utils/formatNumber'
 
 function formatTimestamp(nanos: string): string {
   const ms = parseInt(nanos) / 1e6

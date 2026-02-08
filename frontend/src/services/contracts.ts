@@ -54,11 +54,31 @@ export interface Draw {
     status: "committed" | "revealed" | "expired";
     operator_commit: string;
     target_drand_round: number;
+    drand_randomness: number[] | null;
+    operator_secret: number[] | null;
+    final_randomness: number[] | null;
     winner: string | null;
     reward_amount: string;
     created_at: string;
     revealed_at: string | null;
     reveal_deadline: string;
+    merkle_root: string | null;
+    total_weight: string | null;
+}
+
+export interface StakingHubConfig {
+    admin: string;
+    operator: string;
+    reward_distributor: string;
+    drand_oracle: string;
+    csinj_denom: string;
+    validators: string[];
+    epoch_duration_seconds: number;
+    protocol_fee_bps: number;
+    treasury: string;
+    base_yield_bps: number;
+    regular_pool_bps: number;
+    big_pool_bps: number;
 }
 
 export interface UserWinsResponse {
@@ -182,6 +202,20 @@ export async function fetchUserWinDetails(
             start_after: startAfter ?? null,
             limit: limit ?? 20,
         },
+    });
+}
+
+// ---------- Single draw query ----------
+export async function fetchDraw(drawId: number): Promise<Draw> {
+    return queryContract<Draw>(CONTRACTS.rewardDistributor, {
+        draw: { draw_id: drawId },
+    });
+}
+
+// ---------- Staking Hub Config ----------
+export async function fetchStakingHubConfig(): Promise<StakingHubConfig> {
+    return queryContract<StakingHubConfig>(CONTRACTS.stakingHub, {
+        config: {},
     });
 }
 
