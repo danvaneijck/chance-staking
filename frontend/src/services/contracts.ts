@@ -81,6 +81,13 @@ export interface StakingHubConfig {
     base_yield_bps: number;
     regular_pool_bps: number;
     big_pool_bps: number;
+    min_epochs_regular: number;
+    min_epochs_big: number;
+}
+
+export interface StakerInfoResponse {
+    address: string;
+    stake_epoch: number | null;
 }
 
 export interface UserWinsResponse {
@@ -151,6 +158,14 @@ export async function fetchUnstakeRequests(
             start_after: startAfter ?? null,
             limit: limit ?? null,
         },
+    });
+}
+
+export async function fetchStakerInfo(
+    address: string,
+): Promise<StakerInfoResponse> {
+    return queryContract<StakerInfoResponse>(CONTRACTS.stakingHub, {
+        staker_info: { address },
     });
 }
 
