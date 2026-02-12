@@ -1,4 +1,4 @@
-use cosmwasm_std::StdError;
+use cosmwasm_std::{StdError, Uint128};
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -51,7 +51,18 @@ pub enum ContractError {
         big: u16,
         base_yield: u16,
         fee: u16,
-        total: u16,
+        // V2-M-01 FIX: Changed from u16 to u32 to avoid truncation
+        total: u32,
+    },
+
+    // V2-L-01 FIX: Invalid merkle root format
+    #[error("invalid merkle root: {reason}")]
+    InvalidMerkleRoot { reason: String },
+
+    #[error("stake amount {amount} is below minimum {min_stake_amount}")]
+    StakeBelowMinimum {
+        amount: Uint128,
+        min_stake_amount: Uint128,
     },
 
     #[error("insufficient contract balance for claim")]

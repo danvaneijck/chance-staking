@@ -75,4 +75,16 @@ pub enum ContractError {
         required: cosmwasm_std::Uint128,
         available: cosmwasm_std::Uint128,
     },
+
+    #[error("winner {address} not eligible for {draw_type} draw: staked {epochs_staked} epochs, need {min_epochs}")]
+    WinnerNotEligible {
+        address: String,
+        draw_type: String,
+        epochs_staked: u64,
+        min_epochs: u64,
+    },
+
+    // V2-M-03 FIX: Invalid reveal deadline bounds
+    #[error("reveal_deadline_seconds must be between {min} and {max}, got {value}")]
+    InvalidRevealDeadline { value: u64, min: u64, max: u64 },
 }

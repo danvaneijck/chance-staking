@@ -25,6 +25,8 @@ pub struct InstantiateMsg {
     pub min_epochs_regular: u64,
     /// Minimum epochs staked to be eligible for big draws
     pub min_epochs_big: u64,
+    /// Minimum INJ amount required per stake transaction (0 = no minimum)
+    pub min_stake_amount: Uint128,
 }
 
 #[cw_serde]
@@ -58,6 +60,7 @@ pub enum ExecuteMsg {
         big_pool_bps: Option<u16>,
         min_epochs_regular: Option<u64>,
         min_epochs_big: Option<u64>,
+        min_stake_amount: Option<Uint128>,
     },
     /// Update validator set. Admin only.
     UpdateValidators {

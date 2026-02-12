@@ -56,6 +56,7 @@ BIG_POOL_BPS=2000
 CSINJ_SUBDENOM="csINJ"
 MIN_EPOCHS_REGULAR=2
 MIN_EPOCHS_BIG=6
+MIN_STAKE_AMOUNT="1000000000000000"  # 0.001 INJ (10^15 attoINJ)
 
 # -- Wasm artifacts --
 DRAND_ORACLE_WASM="./artifacts/chance_drand_oracle.wasm"
@@ -65,9 +66,9 @@ STAKING_HUB_WASM="./artifacts/chance_staking_hub.wasm"
 # -- Optional: reuse existing code IDs (set to skip uploading) --
 # If set, the script will skip storing that contract's wasm and use the given ID.
 # Leave empty to upload fresh.
-EXISTING_DRAND_CODE_ID="39244"
-EXISTING_DISTRIBUTOR_CODE_ID="39245"
-EXISTING_STAKING_HUB_CODE_ID="39246"
+EXISTING_DRAND_CODE_ID=""
+EXISTING_DISTRIBUTOR_CODE_ID=""
+EXISTING_STAKING_HUB_CODE_ID=""
 
 ################################################################################
 #                                   HELPERS                                    #
@@ -299,7 +300,8 @@ STAKING_HUB_INIT_MSG=$(cat <<EOF
   "big_pool_bps": $BIG_POOL_BPS,
   "csinj_subdenom": "$CSINJ_SUBDENOM",
   "min_epochs_regular": $MIN_EPOCHS_REGULAR,
-  "min_epochs_big": $MIN_EPOCHS_BIG
+  "min_epochs_big": $MIN_EPOCHS_BIG,
+  "min_stake_amount": "$MIN_STAKE_AMOUNT"
 }
 EOF
 )

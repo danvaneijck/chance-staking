@@ -40,6 +40,8 @@ pub struct Config {
     pub min_epochs_regular: u64,
     /// Minimum epochs a user must have been staking to be eligible for big draws
     pub min_epochs_big: u64,
+    /// Minimum INJ amount required per stake transaction (0 = no minimum)
+    pub min_stake_amount: Uint128,
 }
 
 #[cw_serde]

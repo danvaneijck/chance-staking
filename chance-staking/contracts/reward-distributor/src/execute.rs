@@ -7,11 +7,30 @@ use cosmwasm_std::{
 use sha2::{Digest, Sha256};
 
 use crate::error::ContractError;
-use crate::msg::{CommitDrawParams, OracleQueryMsg, RevealDrawParams, UpdateConfigParams};
+use crate::msg::{
+    CommitDrawParams, OracleQueryMsg, RevealDrawParams, StakerInfoResponse,
+    StakingHubConfigResponse, StakingHubQueryMsg, UpdateConfigParams,
+};
 use crate::state::{
     Draw, Snapshot, CONFIG, DRAWS, DRAW_STATE, LATEST_SNAPSHOT_EPOCH, SNAPSHOTS, USER_TOTAL_WON,
     USER_WINS, USER_WIN_COUNT,
 };
+
+// V2-M-03 FIX: Bounds for reveal_deadline_seconds
+pub const MIN_REVEAL_DEADLINE_SECS: u64 = 300; // 5 minutes
+pub const MAX_REVEAL_DEADLINE_SECS: u64 = 86400; // 24 hours
+
+/// Validate reveal_deadline_seconds is within acceptable bounds.
+pub fn validate_reveal_deadline(value: u64) -> Result<(), ContractError> {
+    if !(MIN_REVEAL_DEADLINE_SECS..=MAX_REVEAL_DEADLINE_SECS).contains(&value) {
+        return Err(ContractError::InvalidRevealDeadline {
+            value,
+            min: MIN_REVEAL_DEADLINE_SECS,
+            max: MAX_REVEAL_DEADLINE_SECS,
+        });
+    }
+    Ok(())
+}
 
 /// Fund the regular draw pool. Only staking hub can call.
 pub fn fund_regular_pool(
@@ -283,8 +302,9 @@ pub fn commit_draw(
 /// 3. XOR randomness: final = drand_randomness XOR sha256(secret)
 /// 4. Compute winning_ticket = uint128(final[0..16]) % total_weight
 /// 5. Verify merkle proof that winner's range contains winning_ticket
-/// 6. Send reward to winner
-/// 7. Update USER_WINS and USER_TOTAL_WON
+/// 6. Verify winner meets min_epochs eligibility (queries staking hub)
+/// 7. Send reward to winner
+/// 8. Update USER_WINS and USER_TOTAL_WON
 pub fn reveal_draw(
     deps: DepsMut,
     env: Env,
@@ -396,10 +416,48 @@ pub fn reveal_draw(
         return Err(ContractError::InvalidMerkleProof);
     }
 
-    // 7. Send reward to winner
+    // 7. Verify winner meets min_epochs eligibility for this draw type
+    let hub_config_query = QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: config.staking_hub.to_string(),
+        msg: to_json_binary(&StakingHubQueryMsg::Config {})?,
+    });
+    let hub_config: StakingHubConfigResponse = deps.querier.query(&hub_config_query)?;
+
+    let staker_info_query = QueryRequest::Wasm(WasmQuery::Smart {
+        contract_addr: config.staking_hub.to_string(),
+        msg: to_json_binary(&StakingHubQueryMsg::StakerInfo {
+            address: winner_address.clone(),
+        })?,
+    });
+    let staker_info: StakerInfoResponse = deps.querier.query(&staker_info_query)?;
+
+    let min_epochs = match draw.draw_type {
+        DrawType::Regular => hub_config.min_epochs_regular,
+        DrawType::Big => hub_config.min_epochs_big,
+    };
+
+    let epochs_staked = match staker_info.stake_epoch {
+        Some(stake_epoch) if draw.epoch >= stake_epoch => draw.epoch - stake_epoch,
+        _ => 0,
+    };
+
+    if epochs_staked < min_epochs {
+        let draw_type_str = match draw.draw_type {
+            DrawType::Regular => "regular",
+            DrawType::Big => "big",
+        };
+        return Err(ContractError::WinnerNotEligible {
+            address: winner_address,
+            draw_type: draw_type_str.to_string(),
+            epochs_staked,
+            min_epochs,
+        });
+    }
+
+    // 8. Send reward to winner
     let winner_addr = deps.api.addr_validate(&winner_address)?;
 
-    // L-05 FIX: Verify contract has sufficient balance before sending
+    // 8a. L-05 FIX: Verify contract has sufficient balance before sending
     let contract_balance = deps
         .querier
         .query_balance(&env.contract.address, "inj")?
@@ -416,7 +474,7 @@ pub fn reveal_draw(
         amount: coins(draw.reward_amount.u128(), "inj"),
     };
 
-    // 8. Update draw state
+    // 9. Update draw state
     draw.status = DrawStatus::Revealed;
     draw.drand_randomness = Some(drand_randomness.clone());
     draw.operator_secret = Some(operator_secret);
@@ -427,13 +485,13 @@ pub fn reveal_draw(
     draw.total_weight = Some(total_weight);
     DRAWS.save(deps.storage, draw_id, &draw)?;
 
-    // 9. Update draw state totals
+    // 10. Update draw state totals
     let mut state = DRAW_STATE.load(deps.storage)?;
     state.total_draws_completed += 1;
     state.total_rewards_distributed += draw.reward_amount;
     DRAW_STATE.save(deps.storage, &state)?;
 
-    // 10. Update per-user win tracking (O(1) write per win, no unbounded Vec)
+    // 11. Update per-user win tracking (O(1) write per win, no unbounded Vec)
     USER_WINS.save(deps.storage, (&winner_addr, draw_id), &())?;
     let win_count = USER_WIN_COUNT
         .may_load(deps.storage, &winner_addr)?
@@ -560,6 +618,8 @@ pub fn update_config(
         config.staking_hub = deps.api.addr_validate(&hub)?;
     }
     if let Some(deadline) = reveal_deadline_seconds {
+        // V2-M-03 FIX: Validate reveal deadline bounds
+        validate_reveal_deadline(deadline)?;
         config.reveal_deadline_seconds = deadline;
     }
     if let Some(gap) = epochs_between_regular {

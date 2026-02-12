@@ -8,9 +8,9 @@ export const EVM_CHAIN_ID = EvmChainId.Injective;
 export const ENDPOINTS = getNetworkEndpoints(NETWORK);
 
 export const CONTRACTS = {
-    drandOracle: "inj12dg907vrnw3zdsh8hjvf4ywqky8gw7e3v7lwf7",
-    rewardDistributor: "inj1thz9kqf74w4a8yakpx62xmnll3nf032rnnukyy",
-    stakingHub: "inj15vq83p8l6wl7qneulzgnt66dwheh2ecpprj0kn",
+    drandOracle: "inj125aaphw8dgut3d4ju3myqmyel76jc4tsccnstw",
+    rewardDistributor: "inj184vlqxmfjsva9hewmj9ddqkvl5kdmcjetk94hy",
+    stakingHub: "inj1n2pvkp3mcslsydq8uvxcrp5jeyerqmkqxucm2e",
 } as const;
 
 export const INJ_DECIMALS = 18;

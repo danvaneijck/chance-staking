@@ -24,6 +24,9 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
+    // V2-M-03 FIX: Validate reveal deadline bounds at instantiation
+    execute::validate_reveal_deadline(msg.reveal_deadline_seconds)?;
+
     let config = DistributorConfig {
         admin: info.sender.clone(),
         operator: deps.api.addr_validate(&msg.operator)?,
@@ -641,5 +644,126 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, ContractError::DrawExpired { .. }));
+    }
+
+    // ── Audit V2 tests ──
+
+    #[test]
+    fn test_update_config() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let admin = deps.api.addr_make("admin");
+        let new_operator = deps.api.addr_make("new_operator");
+        let new_hub = deps.api.addr_make("new_hub");
+
+        // Non-admin cannot update config
+        let random = deps.api.addr_make("random");
+        let info = message_info(&random, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::UpdateConfig {
+                operator: Some(new_operator.to_string()),
+                staking_hub: None,
+                reveal_deadline_seconds: None,
+                epochs_between_regular: None,
+                epochs_between_big: None,
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::Unauthorized { .. }));
+
+        // Admin can update operator and staking_hub
+        let info = message_info(&admin, &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::UpdateConfig {
+                operator: Some(new_operator.to_string()),
+                staking_hub: Some(new_hub.to_string()),
+                reveal_deadline_seconds: Some(7200),
+                epochs_between_regular: Some(2),
+                epochs_between_big: Some(14),
+            },
+        )
+        .unwrap();
+
+        let config = CONFIG.load(deps.as_ref().storage).unwrap();
+        assert_eq!(config.operator, new_operator);
+        assert_eq!(config.staking_hub, new_hub);
+        assert_eq!(config.reveal_deadline_seconds, 7200);
+        assert_eq!(config.epochs_between_regular, 2);
+        assert_eq!(config.epochs_between_big, 14);
+    }
+
+    #[test]
+    fn test_reveal_deadline_bounds() {
+        // V2-M-03: Verify reveal_deadline_seconds bounds are enforced
+        let mut deps = mock_dependencies();
+
+        // Instantiate with too-low deadline should fail
+        let mock_api = MockApi::default();
+        let admin = mock_api.addr_make("admin");
+        let msg = InstantiateMsg {
+            operator: mock_api.addr_make("operator").to_string(),
+            staking_hub: mock_api.addr_make("staking_hub").to_string(),
+            drand_oracle: mock_api.addr_make("drand_oracle").to_string(),
+            reveal_deadline_seconds: 10, // Too low (min 300)
+            epochs_between_regular: 1,
+            epochs_between_big: 7,
+        };
+        let info = message_info(&admin, &[]);
+        let err = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+        assert!(
+            format!("{:?}", err).contains("InvalidRevealDeadline"),
+            "Expected InvalidRevealDeadline, got: {:?}",
+            err
+        );
+
+        // Instantiate with too-high deadline should fail
+        let msg = InstantiateMsg {
+            operator: mock_api.addr_make("operator").to_string(),
+            staking_hub: mock_api.addr_make("staking_hub").to_string(),
+            drand_oracle: mock_api.addr_make("drand_oracle").to_string(),
+            reveal_deadline_seconds: 100_000, // Too high (max 86400)
+            epochs_between_regular: 1,
+            epochs_between_big: 7,
+        };
+        let admin = mock_api.addr_make("admin");
+        let info = message_info(&admin, &[]);
+        let err = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap_err();
+        assert!(
+            format!("{:?}", err).contains("InvalidRevealDeadline"),
+            "Expected InvalidRevealDeadline, got: {:?}",
+            err
+        );
+
+        // Valid instantiation
+        setup_contract(deps.as_mut());
+
+        // Update config with invalid deadline should fail
+        let admin = deps.api.addr_make("admin");
+        let info = message_info(&admin, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::UpdateConfig {
+                operator: None,
+                staking_hub: None,
+                reveal_deadline_seconds: Some(0),
+                epochs_between_regular: None,
+                epochs_between_big: None,
+            },
+        )
+        .unwrap_err();
+        assert!(
+            format!("{:?}", err).contains("InvalidRevealDeadline"),
+            "Expected InvalidRevealDeadline for zero deadline, got: {:?}",
+            err
+        );
     }
 }
