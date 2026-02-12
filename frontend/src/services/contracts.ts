@@ -253,7 +253,9 @@ export async function fetchStakingApr(
             ),
         ]);
 
-        const annualProvisions = parseFloat(provisions.annualProvisions);
+        // annualProvisions is a Cosmos SDK Dec (18 implicit decimal places),
+        // bondedTokens is a plain integer — divide out the 1e18 factor.
+        const annualProvisions = parseFloat(provisions.annualProvisions) / 1e18;
         const bondedTokens = parseFloat(pool.bondedTokens);
         if (!bondedTokens || !annualProvisions) return null;
 
