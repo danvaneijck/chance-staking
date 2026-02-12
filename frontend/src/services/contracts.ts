@@ -249,7 +249,15 @@ export async function fetchStakingApr(
             mintApi.fetchAnnualProvisions(),
             stakingApi.fetchPool(),
             ...validators.map((addr) =>
-                stakingApi.fetchValidator(addr).catch(() => null),
+                Promise.all([
+                    stakingApi.fetchValidator(addr).catch(() => null),
+                    stakingApi
+                        .fetchDelegation({
+                            injectiveAddress: CONTRACTS.stakingHub,
+                            validatorAddress: addr,
+                        })
+                        .catch(() => null),
+                ]),
             ),
         ]);
 
@@ -261,16 +269,25 @@ export async function fetchStakingApr(
 
         const nominalApr = annualProvisions / bondedTokens;
 
-        // Average commission across the contract's validators
-        const commissions = validatorResults
-            .filter((v): v is NonNullable<typeof v> => v !== null)
-            .map((v) => parseFloat(v.commission.commissionRates.rate));
+        // Weight each validator's commission by its actual delegation amount
+        let totalDelegated = 0;
+        let weightedCommission = 0;
+        for (const [validator, delegation] of validatorResults) {
+            if (!validator) continue;
+            const commission = parseFloat(
+                validator.commission.commissionRates.rate,
+            );
+            const delegated = delegation
+                ? parseFloat(delegation.balance.amount)
+                : 0;
+            totalDelegated += delegated;
+            weightedCommission += commission * delegated;
+        }
 
-        if (commissions.length === 0) return nominalApr * 100;
+        if (totalDelegated === 0) return nominalApr * 100;
 
-        const avgCommission =
-            commissions.reduce((a, b) => a + b, 0) / commissions.length;
-        return nominalApr * (1 - avgCommission) * 100;
+        const effectiveCommission = weightedCommission / totalDelegated;
+        return nominalApr * (1 - effectiveCommission) * 100;
     } catch {
         return null;
     }
