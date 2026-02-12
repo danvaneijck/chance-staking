@@ -122,7 +122,7 @@ store_code() {
     # 4. Head -n 1 to ensure we only get the FIRST match (avoids duplicates)
     # 5. tr to remove double quotes and single quotes
     local code_id
-    code_id=$(echo "$query_output" | grep -A 1 'key: code_id' | grep 'value:' | awk '{print $NF}' | head -n 1 | tr -d '"' | tr -d "'")
+    code_id=$(echo "$query_output" | grep -A 1 'key: code_id' | grep 'value:' | awk '{print $NF}' | head -n 1 | tr -d '"' | tr -d "'" | tr -d '\r')
 
     if [ -z "$code_id" ]; then
         echo "  ERROR: Could not extract Code ID for $label from tx: $txhash" >&2
@@ -182,7 +182,7 @@ instantiate_contract() {
     # 4. Head -n 1 to avoid duplicates from multiple events
     # 5. tr to clean quotes
     local contract_address
-    contract_address=$(echo "$query_output" | grep -A 1 'key: _contract_address' | grep 'value:' | awk '{print $NF}' | head -n 1 | tr -d '"' | tr -d "'")
+    contract_address=$(echo "$query_output" | grep -A 1 'key: _contract_address' | grep 'value:' | awk '{print $NF}' | head -n 1 | tr -d '"' | tr -d "'" | tr -d '\r')
 
     if [[ -z "$contract_address" || "$contract_address" != inj* ]]; then
         echo "  ERROR: Could not extract contract address for $label from tx: $txhash" >&2
@@ -261,7 +261,7 @@ DRAND_INIT_MSG=$(cat <<EOF
 }
 EOF
 )
-DRAND_INIT_MSG=$(echo "$DRAND_INIT_MSG" | tr -d '\n' | tr -s ' ')
+DRAND_INIT_MSG=$(echo "$DRAND_INIT_MSG" | tr -d '\n\r' | tr -s ' ')
 
 DRAND_ORACLE_ADDRESS=$(instantiate_contract "$DRAND_CODE_ID" "$DRAND_INIT_MSG" "Chance Drand Oracle v1.0")
 echo ""
@@ -283,7 +283,7 @@ DISTRIBUTOR_INIT_MSG=$(cat <<EOF
 }
 EOF
 )
-DISTRIBUTOR_INIT_MSG=$(echo "$DISTRIBUTOR_INIT_MSG" | tr -d '\n' | tr -s ' ')
+DISTRIBUTOR_INIT_MSG=$(echo "$DISTRIBUTOR_INIT_MSG" | tr -d '\n\r' | tr -s ' ')
 
 REWARD_DISTRIBUTOR_ADDRESS=$(instantiate_contract "$DISTRIBUTOR_CODE_ID" "$DISTRIBUTOR_INIT_MSG" "Chance Reward Distributor v1.0")
 echo ""
@@ -312,7 +312,7 @@ STAKING_HUB_INIT_MSG=$(cat <<EOF
 }
 EOF
 )
-STAKING_HUB_INIT_MSG=$(echo "$STAKING_HUB_INIT_MSG" | tr -d '\n' | tr -s ' ')
+STAKING_HUB_INIT_MSG=$(echo "$STAKING_HUB_INIT_MSG" | tr -d '\n\r' | tr -s ' ')
 
 # Token Factory denom creation requires 1 INJ fee on testnet (0.1 INJ on mainnet)
 STAKING_HUB_ADDRESS=$(instantiate_contract "$STAKING_HUB_CODE_ID" "$STAKING_HUB_INIT_MSG" "Chance Staking Hub v1.0" "1000000000000000000inj")
@@ -334,7 +334,7 @@ UPDATE_CONFIG_MSG=$(cat <<EOF
 }
 EOF
 )
-UPDATE_CONFIG_MSG=$(echo "$UPDATE_CONFIG_MSG" | tr -d '\n' | tr -s ' ')
+UPDATE_CONFIG_MSG=$(echo "$UPDATE_CONFIG_MSG" | tr -d '\n\r' | tr -s ' ')
 
 UPDATE_RESPONSE=$(yes "$PASSWORD" | injectived tx wasm execute "$REWARD_DISTRIBUTOR_ADDRESS" "$UPDATE_CONFIG_MSG" \
     --from="$FROM" \
