@@ -1,12 +1,13 @@
 import React, { useState } from 'react'
 import { Coins, Shuffle, Trophy, TrendingUp, ArrowRight } from 'lucide-react'
+import { colors } from '../theme'
 
 const steps = [
   {
     icon: Coins,
-    color: '#8B6FFF',
-    bg: 'rgba(139, 111, 255, 0.1)',
-    borderColor: 'rgba(139, 111, 255, 0.2)',
+    color: colors.primary,
+    bg: colors.primaryAlpha(0.1),
+    borderColor: colors.primaryAlpha(0.2),
     title: 'Stake INJ',
     description: 'Deposit INJ and receive csINJ — a liquid staking token backed 1:1 by natively staked INJ.',
   },
@@ -37,7 +38,7 @@ const steps = [
 ]
 
 const distributions = [
-  { label: 'Regular Draws', pct: 70, color: '#8B6FFF', gradient: 'linear-gradient(90deg, #8B6FFF, #6B4FD6)' },
+  { label: 'Regular Draws', pct: 70, color: colors.primary, gradient: `linear-gradient(90deg, ${colors.primary}, ${colors.primaryDark})` },
   { label: 'Big Weekly Draw', pct: 20, color: '#f472b6', gradient: 'linear-gradient(90deg, #f472b6, #ec4899)' },
   { label: 'Base Yield', pct: 5, color: '#22c55e', gradient: '#22c55e' },
   { label: 'Protocol Fee', pct: 5, color: '#f59e0b', gradient: '#f59e0b' },

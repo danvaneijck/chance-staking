@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Plus, Trash2, Radio } from 'lucide-react'
 import { useRpcStore, type Endpoint } from '../store/rpcStore'
+import { colors } from '../theme'
 
 export default function RpcModal() {
     const { endpoints, activeIndex, modalOpen, selectEndpoint, addCustomEndpoint, removeCustomEndpoint, closeModal } =
@@ -119,8 +120,8 @@ function EndpointRow({
         <div
             style={{
                 ...styles.row,
-                borderColor: active ? '#8B6FFF' : '#2A2A38',
-                background: active ? 'rgba(139, 111, 255, 0.06)' : 'transparent',
+                borderColor: active ? colors.primary : '#2A2A38',
+                background: active ? colors.primaryAlpha(0.06) : 'transparent',
             }}
             onClick={onSelect}
         >
@@ -130,7 +131,7 @@ function EndpointRow({
                         width: 16,
                         height: 16,
                         borderRadius: '50%',
-                        border: `2px solid ${active ? '#8B6FFF' : '#3A3A4A'}`,
+                        border: `2px solid ${active ? colors.primary : '#3A3A4A'}`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -143,7 +144,7 @@ function EndpointRow({
                                 width: 8,
                                 height: 8,
                                 borderRadius: '50%',
-                                background: '#8B6FFF',
+                                background: colors.primary,
                             }}
                         />
                     )}
@@ -327,9 +328,9 @@ const styles: Record<string, React.CSSProperties> = {
         gap: 6,
         padding: '9px 16px',
         borderRadius: 8,
-        background: 'rgba(139, 111, 255, 0.1)',
-        border: '1px solid rgba(139, 111, 255, 0.2)',
-        color: '#8B6FFF',
+        background: colors.primaryAlpha(0.1),
+        border: `1px solid ${colors.primaryAlpha(0.2)}`,
+        color: colors.primary,
         fontSize: 13,
         fontWeight: 600,
         cursor: 'pointer',

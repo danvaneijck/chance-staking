@@ -1,5 +1,6 @@
 import React from 'react'
 import { Sparkles, Zap } from 'lucide-react'
+import { colors } from '../theme'
 import { useStore } from '../store/useStore'
 import { formatInj, formatNumber } from '../utils/formatNumber'
 import EpochCountdown from './EpochCountdown'
@@ -19,7 +20,7 @@ export default function HeroSection() {
 
       <div className="hero-content" style={styles.heroContent}>
         <div className="hero-badge" style={styles.badge}>
-          <Sparkles size={13} color="#8B6FFF" />
+          <Sparkles size={13} color={colors.primary} />
           <span>Gamified Liquid Staking on Injective</span>
         </div>
 
@@ -105,7 +106,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 600,
     height: 600,
     borderRadius: '50%',
-    background: 'radial-gradient(circle, rgba(139, 111, 255, 0.1) 0%, transparent 70%)',
+    background: `radial-gradient(circle, ${colors.primaryAlpha(0.1)} 0%, transparent 70%)`,
     filter: 'blur(100px)',
     pointerEvents: 'none',
   },
@@ -146,11 +147,11 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     padding: '7px 16px',
     borderRadius: 9999,
-    background: 'rgba(139, 111, 255, 0.08)',
-    border: '1px solid rgba(139, 111, 255, 0.15)',
+    background: colors.primaryAlpha(0.08),
+    border: `1px solid ${colors.primaryAlpha(0.15)}`,
     fontSize: 12,
     fontWeight: 500,
-    color: '#A78BFF',
+    color: colors.primaryLight,
     marginBottom: 28,
     letterSpacing: '0.02em',
   },
@@ -172,7 +173,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 900,
     letterSpacing: '-0.04em',
     lineHeight: 1.05,
-    background: 'linear-gradient(135deg, #8B6FFF 0%, #38bdf8 50%, #f472b6 100%)',
+    background: colors.heroGradient,
     backgroundClip: 'text',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
@@ -199,13 +200,13 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     padding: '14px 28px',
     borderRadius: 12,
-    background: 'linear-gradient(135deg, #8B6FFF, #6B4FD6)',
-    color: '#FFFFFF',
+    background: colors.primaryGradient,
+    color: '#020202',
     fontSize: 15,
     fontWeight: 700,
     border: 'none',
     cursor: 'pointer',
-    boxShadow: '0 0 32px rgba(139, 111, 255, 0.2), 0 4px 16px rgba(0, 0, 0, 0.3)',
+    boxShadow: `0 0 32px ${colors.primaryAlpha(0.2)}, 0 4px 16px rgba(0, 0, 0, 0.3)`,
     transition: 'all 0.3s ease',
   },
   secondaryCta: {

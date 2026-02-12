@@ -71,4 +71,20 @@ pub enum ContractError {
     // M-04 FIX: Invalid validator address error
     #[error("invalid validator address {address}: {reason}")]
     InvalidValidatorAddress { address: String, reason: String },
+
+    #[error("validator {validator} is not in the active validator set")]
+    ValidatorNotInSet { validator: String },
+
+    #[error("source and destination validators must be different")]
+    SameValidator,
+
+    #[error("redelegation amount {amount} exceeds delegation to {validator} ({delegated})")]
+    RedelegationExceedsDelegation {
+        amount: Uint128,
+        validator: String,
+        delegated: Uint128,
+    },
+
+    #[error("invalid validator weights: {reason}")]
+    InvalidValidatorWeights { reason: String },
 }

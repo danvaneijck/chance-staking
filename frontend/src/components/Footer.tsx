@@ -1,6 +1,7 @@
 import React from 'react'
 import { Sparkles, Github, ExternalLink } from 'lucide-react'
 import { CONTRACTS, NETWORK } from '../config'
+import { colors } from '../theme'
 
 const explorerBase = (NETWORK as string).includes('mainnet')
   ? 'https://explorer.injective.network'
@@ -13,7 +14,7 @@ export default function Footer() {
         <div className="footer-top" style={styles.top}>
           <div style={styles.brand}>
             <div style={styles.logoRow}>
-              <Sparkles size={18} color="#8B6FFF" />
+              <Sparkles size={18} color={colors.primary} />
               <span style={styles.logoText}>Chance.Staking</span>
             </div>
             <p style={styles.brandDesc}>

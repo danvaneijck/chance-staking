@@ -1,7 +1,10 @@
-use cosmwasm_std::{to_json_binary, Binary, Deps, Order, StdResult};
+use cosmwasm_std::{to_json_binary, Binary, Deps, Env, Order, StdResult, Uint128};
 use cw_storage_plus::Bound;
 
-use crate::msg::{ExchangeRateResponse, StakerInfoResponse, UnstakeRequestEntry};
+use crate::msg::{
+    ExchangeRateResponse, StakerInfoResponse, UnstakeRequestEntry, ValidatorDelegation,
+    ValidatorDelegationsResponse,
+};
 use crate::state::{
     CONFIG, EPOCH_STATE, EXCHANGE_RATE, TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING, UNSTAKE_REQUESTS,
     USER_STAKE_EPOCH,
@@ -56,5 +59,30 @@ pub fn query_staker_info(deps: Deps, address: String) -> StdResult<Binary> {
     to_json_binary(&StakerInfoResponse {
         address,
         stake_epoch,
+    })
+}
+
+pub fn query_validator_delegations(deps: Deps, env: Env) -> StdResult<Binary> {
+    let config = CONFIG.load(deps.storage)?;
+    let mut delegations = Vec::new();
+    let mut total_delegated = Uint128::zero();
+
+    for validator in &config.validators {
+        let delegation = deps
+            .querier
+            .query_delegation(&env.contract.address, validator)?;
+        let amount = delegation
+            .map(|d| d.amount.amount)
+            .unwrap_or(Uint128::zero());
+        delegations.push(ValidatorDelegation {
+            validator: validator.clone(),
+            amount,
+        });
+        total_delegated += amount;
+    }
+
+    to_json_binary(&ValidatorDelegationsResponse {
+        delegations,
+        total_delegated,
     })
 }

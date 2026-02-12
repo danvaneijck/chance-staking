@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useCallback } from 'react'
 import { useStore } from '../store/useStore'
+import { colors } from '../theme'
 
 interface Particle {
   x: number
@@ -15,7 +16,7 @@ interface Particle {
 }
 
 const COLORS = [
-  '#8B6FFF', '#A78BFF', '#6B4FD6',  // purple
+  colors.primary, colors.primaryLight, colors.primaryDark,  // gold
   '#38bdf8', '#0ea5e9',              // cyan
   '#f472b6', '#ec4899',              // pink
   '#f59e0b', '#fbbf24',              // gold

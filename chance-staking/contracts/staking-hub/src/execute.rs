@@ -7,7 +7,7 @@ use injective_cosmwasm::{
 };
 
 use crate::error::ContractError;
-use crate::msg::DistributorExecuteMsg;
+use crate::msg::{DistributorExecuteMsg, ValidatorWeight};
 use crate::state::{
     UnstakeRequest, CONFIG, EPOCH_STATE, EXCHANGE_RATE, NEXT_UNSTAKE_ID, PENDING_UNSTAKE_TOTAL,
     TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING, UNSTAKE_REQUESTS, USER_STAKE_EPOCH,
@@ -750,6 +750,227 @@ pub fn sync_delegations(
                 .add_attribute("new_backing", total_delegated.to_string())
                 .add_attribute("new_rate", new_rate.to_string()),
         ))
+}
+
+/// Redelegate a specific amount of INJ from one validator to another.
+/// Both validators must be in the active validator set. Operator only.
+pub fn redelegate_stake(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    src_validator: String,
+    dst_validator: String,
+    amount: Uint128,
+) -> Result<ContractResponse, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+
+    if info.sender != config.operator {
+        return Err(ContractError::Unauthorized {
+            reason: "only operator can redelegate stake".to_string(),
+        });
+    }
+
+    if !config.validators.contains(&src_validator) {
+        return Err(ContractError::ValidatorNotInSet {
+            validator: src_validator,
+        });
+    }
+    if !config.validators.contains(&dst_validator) {
+        return Err(ContractError::ValidatorNotInSet {
+            validator: dst_validator,
+        });
+    }
+
+    if src_validator == dst_validator {
+        return Err(ContractError::SameValidator);
+    }
+
+    if amount.is_zero() {
+        return Err(ContractError::NoFundsSent);
+    }
+
+    let delegation = deps
+        .querier
+        .query_delegation(&env.contract.address, &src_validator)?;
+    let delegated = delegation
+        .map(|d| d.amount.amount)
+        .unwrap_or(Uint128::zero());
+
+    if amount > delegated {
+        return Err(ContractError::RedelegationExceedsDelegation {
+            amount,
+            validator: src_validator.clone(),
+            delegated,
+        });
+    }
+
+    let redelegate_msg = CosmosMsg::Staking(StakingMsg::Redelegate {
+        src_validator: src_validator.clone(),
+        dst_validator: dst_validator.clone(),
+        amount: Coin {
+            denom: "inj".to_string(),
+            amount,
+        },
+    });
+
+    Ok(ContractResponse::new()
+        .add_message(redelegate_msg)
+        .add_attribute("action", "redelegate_stake")
+        .add_event(
+            Event::new("chance_redelegate_stake")
+                .add_attribute("src_validator", src_validator)
+                .add_attribute("dst_validator", dst_validator)
+                .add_attribute("amount", amount.to_string()),
+        ))
+}
+
+/// Rebalance delegations across validators to match target weights.
+/// Queries actual on-chain delegations, computes diffs vs target distribution,
+/// and emits redelegation messages. Operator only.
+pub fn rebalance_stake(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+    validator_weights: Vec<ValidatorWeight>,
+) -> Result<ContractResponse, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+
+    if info.sender != config.operator {
+        return Err(ContractError::Unauthorized {
+            reason: "only operator can rebalance stake".to_string(),
+        });
+    }
+
+    if validator_weights.len() != config.validators.len() {
+        return Err(ContractError::InvalidValidatorWeights {
+            reason: format!(
+                "expected {} weights (one per validator), got {}",
+                config.validators.len(),
+                validator_weights.len()
+            ),
+        });
+    }
+
+    let mut weight_map: Vec<(String, u64)> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let mut total_weight: u128 = 0;
+
+    for vw in &validator_weights {
+        if !config.validators.contains(&vw.validator) {
+            return Err(ContractError::ValidatorNotInSet {
+                validator: vw.validator.clone(),
+            });
+        }
+        if !seen.insert(vw.validator.clone()) {
+            return Err(ContractError::InvalidValidatorWeights {
+                reason: format!("duplicate validator: {}", vw.validator),
+            });
+        }
+        if vw.weight == 0 {
+            return Err(ContractError::InvalidValidatorWeights {
+                reason: format!("weight for {} must be > 0", vw.validator),
+            });
+        }
+        total_weight += vw.weight as u128;
+        weight_map.push((vw.validator.clone(), vw.weight));
+    }
+
+    // Query actual on-chain delegations
+    let mut actual: Vec<(String, Uint128)> = Vec::new();
+    let mut total_delegated = Uint128::zero();
+    for (validator, _) in &weight_map {
+        let delegation = deps
+            .querier
+            .query_delegation(&env.contract.address, validator)?;
+        let amount = delegation
+            .map(|d| d.amount.amount)
+            .unwrap_or(Uint128::zero());
+        actual.push((validator.clone(), amount));
+        total_delegated += amount;
+    }
+
+    if total_delegated.is_zero() {
+        return Ok(ContractResponse::new()
+            .add_attribute("action", "rebalance_stake")
+            .add_attribute("result", "nothing_to_rebalance"));
+    }
+
+    // Compute target amounts with remainder to last validator
+    let mut targets: Vec<(String, Uint128)> = Vec::new();
+    let mut assigned = Uint128::zero();
+    for (i, (validator, weight)) in weight_map.iter().enumerate() {
+        let target = if i == weight_map.len() - 1 {
+            total_delegated - assigned
+        } else {
+            let t = total_delegated.multiply_ratio(*weight as u128, total_weight);
+            assigned += t;
+            t
+        };
+        targets.push((validator.clone(), target));
+    }
+
+    // Separate into senders (over-delegated) and receivers (under-delegated)
+    let mut senders: Vec<(String, Uint128)> = Vec::new();
+    let mut receivers: Vec<(String, Uint128)> = Vec::new();
+
+    for (i, (validator, target)) in targets.iter().enumerate() {
+        let current = actual[i].1;
+        if current > *target {
+            senders.push((validator.clone(), current - *target));
+        } else if current < *target {
+            receivers.push((validator.clone(), *target - current));
+        }
+    }
+
+    // Greedy matching: redelegate from senders to receivers
+    let mut msgs: Vec<CosmosMsg<InjectiveMsgWrapper>> = Vec::new();
+    let mut r_idx = 0;
+    let mut r_remaining = receivers
+        .first()
+        .map(|(_, a)| *a)
+        .unwrap_or(Uint128::zero());
+
+    for (src_val, surplus) in &senders {
+        let mut s_remaining = *surplus;
+        while !s_remaining.is_zero() && r_idx < receivers.len() {
+            let transfer = std::cmp::min(s_remaining, r_remaining);
+            if !transfer.is_zero() {
+                msgs.push(CosmosMsg::Staking(StakingMsg::Redelegate {
+                    src_validator: src_val.clone(),
+                    dst_validator: receivers[r_idx].0.clone(),
+                    amount: Coin {
+                        denom: "inj".to_string(),
+                        amount: transfer,
+                    },
+                }));
+            }
+            s_remaining -= transfer;
+            r_remaining -= transfer;
+            if r_remaining.is_zero() {
+                r_idx += 1;
+                if r_idx < receivers.len() {
+                    r_remaining = receivers[r_idx].1;
+                }
+            }
+        }
+    }
+
+    let mut response = ContractResponse::new()
+        .add_attribute("action", "rebalance_stake")
+        .add_attribute("total_delegated", total_delegated.to_string())
+        .add_attribute("num_redelegations", msgs.len().to_string());
+
+    for msg in msgs {
+        response = response.add_message(msg);
+    }
+
+    response = response.add_event(
+        Event::new("chance_rebalance_stake")
+            .add_attribute("total_delegated", total_delegated.to_string())
+            .add_attribute("total_weight", total_weight.to_string()),
+    );
+
+    Ok(response)
 }
 
 /// M-04 FIX: Helper to validate validator addresses
