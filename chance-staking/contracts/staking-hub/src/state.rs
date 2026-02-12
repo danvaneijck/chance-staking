@@ -13,8 +13,8 @@ pub const NEXT_UNSTAKE_ID: Map<&Addr, u64> = Map::new("next_unstake_id");
 /// Updated on unstake (increment) and claim_unstaked (decrement) to avoid
 /// iterating all requests on every distribute_rewards() call.
 pub const PENDING_UNSTAKE_TOTAL: Item<Uint128> = Item::new("pending_unstake");
-/// Tracks the epoch when each user first staked. Set once on first stake,
-/// used by the off-chain snapshot builder to enforce min_epochs eligibility.
+/// Tracks the epoch of the user's most recent stake. Resets on every stake
+/// so newly added funds must also satisfy the min_epochs eligibility requirement.
 pub const USER_STAKE_EPOCH: Map<&Addr, u64> = Map::new("user_stake_epoch");
 
 #[cw_serde]

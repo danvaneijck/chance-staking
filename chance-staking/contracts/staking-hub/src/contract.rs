@@ -669,8 +669,8 @@ mod tests {
     }
 
     #[test]
-    fn test_stake_records_epoch() {
-        use crate::state::USER_STAKE_EPOCH;
+    fn test_stake_records_and_resets_epoch() {
+        use crate::state::{EPOCH_STATE, USER_STAKE_EPOCH};
 
         let mut deps = mock_dependencies();
         setup_contract(deps.as_mut());
@@ -679,19 +679,24 @@ mod tests {
         let info = message_info(&user1, &coins(100_000_000, "inj"));
         execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
 
-        // Verify stake epoch recorded
+        // Verify stake epoch recorded as epoch 1
         let addr = deps.api.addr_make("user1");
         let stake_epoch = USER_STAKE_EPOCH.load(deps.as_ref().storage, &addr).unwrap();
-        assert_eq!(stake_epoch, 1); // epoch starts at 1
+        assert_eq!(stake_epoch, 1);
 
-        // Second stake should not overwrite
+        // Simulate epoch advancing to 5
+        let mut epoch_state = EPOCH_STATE.load(deps.as_ref().storage).unwrap();
+        epoch_state.current_epoch = 5;
+        EPOCH_STATE.save(deps.as_mut().storage, &epoch_state).unwrap();
+
+        // Second stake should reset epoch to 5
         let user1 = deps.api.addr_make("user1");
         let info = message_info(&user1, &coins(50_000_000, "inj"));
         execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
 
         let addr = deps.api.addr_make("user1");
         let stake_epoch = USER_STAKE_EPOCH.load(deps.as_ref().storage, &addr).unwrap();
-        assert_eq!(stake_epoch, 1); // still epoch 1
+        assert_eq!(stake_epoch, 5); // reset to current epoch
     }
 
     #[test]

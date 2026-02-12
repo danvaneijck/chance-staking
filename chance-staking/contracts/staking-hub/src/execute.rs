@@ -82,10 +82,9 @@ pub fn stake(
     epoch_state.total_staked = new_backing;
     EPOCH_STATE.save(deps.storage, &epoch_state)?;
 
-    // Record the epoch when this user first staked (set once, never overwritten)
-    if !USER_STAKE_EPOCH.has(deps.storage, &info.sender) {
-        USER_STAKE_EPOCH.save(deps.storage, &info.sender, &epoch_state.current_epoch)?;
-    }
+    // Record the epoch of this stake (resets on every stake so that newly added
+    // funds must also satisfy the min_epochs eligibility requirement)
+    USER_STAKE_EPOCH.save(deps.storage, &info.sender, &epoch_state.current_epoch)?;
 
     // Mint csINJ via Token Factory
     let mint_msg = create_mint_tokens_msg(

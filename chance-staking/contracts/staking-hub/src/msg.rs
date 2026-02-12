@@ -107,6 +107,6 @@ pub struct UnstakeRequestEntry {
 #[cw_serde]
 pub struct StakerInfoResponse {
     pub address: String,
-    /// The epoch when this user first staked, or None if they have never staked.
+    /// The epoch of this user's most recent stake, or None if they have never staked.
     pub stake_epoch: Option<u64>,
 }
