@@ -42,6 +42,10 @@ interface ContractState {
     snapshotNumHolders: number;
     minEpochsRegular: number;
     minEpochsBig: number;
+    baseYieldBps: number;
+    regularPoolBps: number;
+    bigPoolBps: number;
+    protocolFeeBps: number;
 }
 
 interface ConfettiState {
@@ -163,6 +167,10 @@ export const useStore = create<AppState>()(
             snapshotNumHolders: 0,
             minEpochsRegular: 0,
             minEpochsBig: 0,
+            baseYieldBps: 500,
+            regularPoolBps: 7000,
+            bigPoolBps: 2000,
+            protocolFeeBps: 500,
 
             // Confetti state
             showConfetti: false,
@@ -293,6 +301,10 @@ export const useStore = create<AppState>()(
                         minEpochsRegular:
                             hubConfig.min_epochs_regular ?? 0,
                         minEpochsBig: hubConfig.min_epochs_big ?? 0,
+                        baseYieldBps: hubConfig.base_yield_bps,
+                        regularPoolBps: hubConfig.regular_pool_bps,
+                        bigPoolBps: hubConfig.big_pool_bps,
+                        protocolFeeBps: hubConfig.protocol_fee_bps,
                         snapshotTotalWeight:
                             epochState.snapshot_total_weight || "0",
                         snapshotNumHolders:
