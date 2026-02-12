@@ -67,7 +67,7 @@ export default function DrawDetail({ drawId }: { drawId: number }) {
       <div className="draw-detail-container section-container" style={styles.container}>
         <button
           style={styles.backButton}
-          onClick={() => selectDraw(null)}
+          onClick={() => { window.location.hash = '#/draws' }}
         >
           <ArrowLeft size={18} />
           Back to Draws

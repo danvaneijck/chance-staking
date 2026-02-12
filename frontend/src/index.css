@@ -394,3 +394,95 @@ input:focus, textarea:focus {
     text-align: center !important;
   }
 }
+
+/* ── New pages responsive ── */
+@media (max-width: 768px) {
+  /* Validators */
+  .validators-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .validators-page-stats {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  /* How It Works page */
+  .hiw-page-math-steps {
+    grid-template-columns: 1fr !important;
+  }
+  .hiw-page-security-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .hiw-page-timing-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .hiw-page-steps {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  .hiw-page-step-arrow {
+    transform: rotate(90deg);
+    padding-top: 0 !important;
+    padding: 4px 0 !important;
+  }
+  .hiw-page-timeline {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+  .hiw-page-split-legend {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  /* Staking page */
+  .staking-page-stats {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  /* Draws page */
+  .draws-page-stats {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  /* Docs page */
+  .docs-layout {
+    flex-direction: column !important;
+  }
+  .docs-sidebar {
+    position: static !important;
+    width: 100% !important;
+    max-height: none !important;
+    border-right: none !important;
+    border-bottom: 1px solid #2A2A38 !important;
+    padding-right: 0 !important;
+    padding-bottom: 16px !important;
+    margin-bottom: 24px !important;
+    display: none !important;
+  }
+  .docs-sidebar.open {
+    display: flex !important;
+  }
+  .docs-sidebar-toggle {
+    display: flex !important;
+  }
+  /* Contracts page */
+  .contracts-stats {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  .contracts-query-buttons {
+    flex-wrap: wrap !important;
+  }
+  /* Audit page */
+  .audit-stats {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  .audit-finding-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+  .audit-finding-right {
+    flex-wrap: wrap !important;
+  }
+}

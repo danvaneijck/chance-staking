@@ -2,7 +2,11 @@ import React, { useState, useEffect } from 'react'
 import { Timer } from 'lucide-react'
 import { useStore } from '../store/useStore'
 
-export default function EpochCountdown() {
+interface EpochCountdownProps {
+  compact?: boolean
+}
+
+export default function EpochCountdown({ compact = false }: EpochCountdownProps) {
   const currentEpoch = useStore((s) => s.currentEpoch)
   const epochStartTime = useStore((s) => s.epochStartTime)
   const epochDurationSeconds = useStore((s) => s.epochDurationSeconds)
@@ -37,6 +41,19 @@ export default function EpochCountdown() {
 
   const pad = (n: number) => String(n).padStart(2, '0')
   const isAlmostDone = progress > 90
+
+  if (compact) {
+    return (
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#F0F0F5', fontVariantNumeric: 'tabular-nums' as const }}>
+          Epoch {currentEpoch}
+        </div>
+        <div style={{ fontSize: 11, color: '#8E8EA0', marginTop: 1 }}>
+          {remaining.d > 0 && `${remaining.d}d `}{pad(remaining.h)}h {pad(remaining.m)}m
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="epoch-countdown-wrapper" style={styles.wrapper}>

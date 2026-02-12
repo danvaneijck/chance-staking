@@ -1,5 +1,10 @@
 import React from 'react'
 import { Sparkles, Github, ExternalLink } from 'lucide-react'
+import { CONTRACTS, NETWORK } from '../config'
+
+const explorerBase = (NETWORK as string).includes('mainnet')
+  ? 'https://explorer.injective.network'
+  : 'https://testnet.explorer.injective.network'
 
 export default function Footer() {
   return (
@@ -20,21 +25,22 @@ export default function Footer() {
           <div className="footer-links-grid" style={styles.linksGrid}>
             <div style={styles.linkCol}>
               <h4 style={styles.linkTitle}>Protocol</h4>
-              <a href="#stake" style={styles.link}>Stake</a>
-              <a href="#draws" style={styles.link}>Draws</a>
-              <a href="#how-it-works" style={styles.link}>How It Works</a>
+              <a href="#/stake" style={styles.link}>Stake</a>
+              <a href="#/draws" style={styles.link}>Draws</a>
+              <a href="#/how-it-works" style={styles.link}>How It Works</a>
+              <a href="#/validators" style={styles.link}>Validators</a>
             </div>
             <div style={styles.linkCol}>
               <h4 style={styles.linkTitle}>Resources</h4>
-              <a href="#" style={styles.link}>Documentation</a>
-              <a href="#" style={styles.link}>Smart Contracts</a>
-              <a href="#" style={styles.link}>Audit Report</a>
+              <a href="#/docs" style={styles.link}>Documentation</a>
+              <a href="#/contracts" style={styles.link}>Smart Contracts</a>
+              <a href="#/audit" style={styles.link}>Audit Report</a>
             </div>
             <div style={styles.linkCol}>
               <h4 style={styles.linkTitle}>Community</h4>
-              <a href="#" style={styles.link}>Discord</a>
-              <a href="#" style={styles.link}>Twitter</a>
-              <a href="#" style={styles.link}>
+              {/* <a href="#" style={styles.link}>Discord</a>
+              <a href="#" style={styles.link}>Twitter</a> */}
+              <a href="https://github.com/danvaneijck/chance-staking" style={styles.link}>
                 <Github size={12} style={{ marginRight: 4 }} />
                 GitHub
               </a>
@@ -47,9 +53,9 @@ export default function Footer() {
             2025 Chance.Staking. Built on Injective.
           </span>
           <div style={styles.bottomLinks}>
-            <a href="#" style={styles.bottomLink}>Terms</a>
-            <a href="#" style={styles.bottomLink}>Privacy</a>
-            <a href="#" style={styles.bottomLink}>
+            <a href="#/terms" style={styles.bottomLink}>Terms</a>
+            <a href="#/privacy" style={styles.bottomLink}>Privacy</a>
+            <a href={`${explorerBase}/contract/${CONTRACTS.stakingHub}`} target="_blank" rel="noopener noreferrer" style={styles.bottomLink}>
               Injective Explorer <ExternalLink size={10} />
             </a>
           </div>

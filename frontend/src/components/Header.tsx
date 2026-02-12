@@ -3,12 +3,20 @@ import { Sparkles, ChevronDown, Wallet, LogOut, Copy, Check, Menu, X } from 'luc
 import { useStore } from '../store/useStore'
 import type { WalletType } from '../store/useStore'
 
+const navLinks = [
+  { href: '#/stake', label: 'Stake' },
+  { href: '#/draws', label: 'Draws' },
+  { href: '#/how-it-works', label: 'How It Works' },
+  { href: '#/validators', label: 'Validators' },
+]
+
 export default function Header() {
   const { isConnected, address, injectiveAddress, walletType, isConnecting, connect, disconnect } = useStore()
   const [showWalletMenu, setShowWalletMenu] = useState(false)
   const [showAccountMenu, setShowAccountMenu] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [currentHash, setCurrentHash] = useState(window.location.hash)
   const walletRef = useRef<HTMLDivElement>(null)
   const accountRef = useRef<HTMLDivElement>(null)
 
@@ -22,6 +30,13 @@ export default function Header() {
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
+
+  // Track current hash for active nav highlighting
+  useEffect(() => {
+    const onHash = () => setCurrentHash(window.location.hash)
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -69,7 +84,7 @@ export default function Header() {
     <>
       <header style={styles.header}>
         <div className="header-inner" style={styles.headerInner}>
-          <a href="#" style={{ textDecoration: 'none' }}>
+          <a href="#/" style={{ textDecoration: 'none' }}>
             <div style={styles.logoSection}>
               <div style={styles.logoIcon}>
                 <Sparkles size={22} color="#8B6FFF" />
@@ -84,10 +99,18 @@ export default function Header() {
 
           {/* Desktop nav */}
           <nav className="header-nav header-nav-desktop" style={styles.nav}>
-            <a href="#stake" style={styles.navLink}>Stake</a>
-            <a href="#draws" style={styles.navLink}>Draws</a>
-            <a href="#how-it-works" style={styles.navLink}>How It Works</a>
-            {isConnected && <a href="#portfolio" style={styles.navLink}>Portfolio</a>}
+            {navLinks.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                style={{
+                  ...styles.navLink,
+                  color: currentHash === link.href ? '#F0F0F5' : '#8E8EA0',
+                }}
+              >
+                {link.label}
+              </a>
+            ))}
           </nav>
 
           {/* Desktop wallet section */}
@@ -226,20 +249,19 @@ export default function Header() {
         </div>
 
         <nav style={styles.mobileNav}>
-          <a href="#stake" style={styles.mobileNavLink} onClick={handleNavClick}>
-            Stake
-          </a>
-          <a href="#draws" style={styles.mobileNavLink} onClick={handleNavClick}>
-            Draws
-          </a>
-          <a href="#how-it-works" style={styles.mobileNavLink} onClick={handleNavClick}>
-            How It Works
-          </a>
-          {isConnected && (
-            <a href="#portfolio" style={styles.mobileNavLink} onClick={handleNavClick}>
-              Portfolio
+          {navLinks.map((link) => (
+            <a
+              key={link.href}
+              href={link.href}
+              style={{
+                ...styles.mobileNavLink,
+                color: currentHash === link.href ? '#F0F0F5' : '#C8C8D4',
+              }}
+              onClick={handleNavClick}
+            >
+              {link.label}
             </a>
-          )}
+          ))}
         </nav>
 
         <div style={styles.mobileDrawerDivider} />
