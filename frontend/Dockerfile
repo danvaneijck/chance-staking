@@ -5,8 +5,12 @@ RUN apk add --no-cache python3 make g++ linux-headers eudev-dev libusb-dev
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
-RUN npm ci
+# Copy package files and .npmrc for better CI stability
+COPY package.json package-lock.json .npmrc* ./
+
+# Install dependencies - using npm install with legacy-peer-deps for compatibility
+# Note: package-lock.json has peer dependency issues, so we use install instead of ci
+RUN npm install --legacy-peer-deps --no-audit --no-fund
 
 COPY . .
 RUN npm run build
