@@ -54,6 +54,8 @@ BASE_YIELD_BPS=500
 REGULAR_POOL_BPS=7000
 BIG_POOL_BPS=2000
 CSINJ_SUBDENOM="csINJ"
+MIN_EPOCHS_REGULAR=1
+MIN_EPOCHS_BIG=1
 
 # -- Wasm artifacts --
 DRAND_ORACLE_WASM="./artifacts/chance_drand_oracle.wasm"
@@ -295,7 +297,9 @@ STAKING_HUB_INIT_MSG=$(cat <<EOF
   "base_yield_bps": $BASE_YIELD_BPS,
   "regular_pool_bps": $REGULAR_POOL_BPS,
   "big_pool_bps": $BIG_POOL_BPS,
-  "csinj_subdenom": "$CSINJ_SUBDENOM"
+  "csinj_subdenom": "$CSINJ_SUBDENOM",
+  "min_epochs_regular": $MIN_EPOCHS_REGULAR,
+  "min_epochs_big": $MIN_EPOCHS_BIG
 }
 EOF
 )

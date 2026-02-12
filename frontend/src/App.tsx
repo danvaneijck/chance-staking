@@ -6,6 +6,7 @@ import StakingPanel from './components/StakingPanel'
 import PortfolioSection from './components/PortfolioSection'
 import DrawsSection from './components/DrawsSection'
 import DrawDetail from './components/DrawDetail'
+import RewardsCalculator from './components/RewardsCalculator'
 import HowItWorks from './components/HowItWorks'
 import Footer from './components/Footer'
 import ToastContainer from './components/Toast'
@@ -88,6 +89,7 @@ function App() {
         <main>
           <HeroSection />
           <StakingPanel />
+          <RewardsCalculator />
           {isConnected && <PortfolioSection />}
           <DrawsSection />
           <HowItWorks />

@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Clock, Trophy, Download, Loader, Target } from 'lucide-react'
+import { Clock, Trophy, Download, Loader, Target, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { formatInj, formatNumber } from '../utils/formatNumber'
 
@@ -24,6 +24,10 @@ export default function PortfolioSection() {
   const csinjBalance = useStore((s) => s.csinjBalance)
   const snapshotTotalWeight = useStore((s) => s.snapshotTotalWeight)
   const snapshotNumHolders = useStore((s) => s.snapshotNumHolders)
+  const stakeEpoch = useStore((s) => s.stakeEpoch)
+  const currentEpoch = useStore((s) => s.currentEpoch)
+  const minEpochsRegular = useStore((s) => s.minEpochsRegular)
+  const minEpochsBig = useStore((s) => s.minEpochsBig)
 
   const [tab, setTab] = useState<'overview' | 'unstaking' | 'wins'>('overview')
   const [claiming, setClaiming] = useState<number | null>(null)
@@ -95,6 +99,76 @@ export default function PortfolioSection() {
                 </div>
               </div>
             </div>
+
+            {/* Eligibility Card */}
+            {stakeEpoch !== null && parseFloat(csinjBalance) > 0 && (() => {
+              const epochsStaked = currentEpoch - stakeEpoch
+              const regularEligible = epochsStaked >= minEpochsRegular
+              const bigEligible = epochsStaked >= minEpochsBig
+              const regularRemaining = Math.max(0, minEpochsRegular - epochsStaked)
+              const bigRemaining = Math.max(0, minEpochsBig - epochsStaked)
+              const allEligible = regularEligible && bigEligible
+
+              return (
+                <div style={{
+                  ...styles.eligibilityCard,
+                  borderColor: allEligible
+                    ? 'rgba(34, 197, 94, 0.15)'
+                    : 'rgba(245, 158, 11, 0.15)',
+                }}>
+                  <div style={styles.eligibilityHeader}>
+                    <div style={{
+                      ...styles.eligibilityIconWrap,
+                      background: allEligible
+                        ? 'rgba(34, 197, 94, 0.1)'
+                        : 'rgba(245, 158, 11, 0.1)',
+                    }}>
+                      {allEligible
+                        ? <ShieldCheck size={16} color="#22c55e" />
+                        : <ShieldAlert size={16} color="#f59e0b" />}
+                    </div>
+                    <div>
+                      <div style={styles.eligibilityTitle}>
+                        {allEligible ? 'Eligible for All Draws' : 'Draw Eligibility'}
+                      </div>
+                      <div style={styles.eligibilitySubtitle}>
+                        Staked since epoch {stakeEpoch} ({epochsStaked} epoch{epochsStaked !== 1 ? 's' : ''} ago)
+                      </div>
+                    </div>
+                  </div>
+                  <div style={styles.eligibilityBody}>
+                    <div style={styles.eligibilityItem}>
+                      <div style={{
+                        ...styles.eligibilityDot,
+                        background: regularEligible ? '#22c55e' : '#f59e0b',
+                      }} />
+                      <div>
+                        <div style={styles.eligibilityLabel}>Regular Draws</div>
+                        <div style={styles.eligibilityStatus}>
+                          {regularEligible
+                            ? 'Eligible'
+                            : `${regularRemaining} epoch${regularRemaining !== 1 ? 's' : ''} remaining`}
+                        </div>
+                      </div>
+                    </div>
+                    <div style={styles.eligibilityItem}>
+                      <div style={{
+                        ...styles.eligibilityDot,
+                        background: bigEligible ? '#22c55e' : '#f59e0b',
+                      }} />
+                      <div>
+                        <div style={styles.eligibilityLabel}>Big Jackpot</div>
+                        <div style={styles.eligibilityStatus}>
+                          {bigEligible
+                            ? 'Eligible'
+                            : `${bigRemaining} epoch${bigRemaining !== 1 ? 's' : ''} remaining`}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Your Odds Card */}
             {parseFloat(csinjBalance) > 0 && (
@@ -446,6 +520,67 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 15,
     fontWeight: 700,
     fontVariantNumeric: 'tabular-nums',
+  },
+  eligibilityCard: {
+    marginTop: 12,
+    background: '#1A1A22',
+    border: '1px solid rgba(245, 158, 11, 0.15)',
+    borderRadius: 16,
+    padding: 22,
+  },
+  eligibilityHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  eligibilityIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  eligibilityTitle: {
+    fontSize: 15,
+    fontWeight: 700,
+    color: '#F0F0F5',
+  },
+  eligibilitySubtitle: {
+    fontSize: 11,
+    color: '#8E8EA0',
+    marginTop: 2,
+  },
+  eligibilityBody: {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: 10,
+  },
+  eligibilityItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: '10px 14px',
+    borderRadius: 10,
+    background: '#0F0F13',
+  },
+  eligibilityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: '50%',
+    flexShrink: 0,
+  },
+  eligibilityLabel: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: '#F0F0F5',
+  },
+  eligibilityStatus: {
+    fontSize: 11,
+    color: '#8E8EA0',
+    marginTop: 1,
   },
   oddsCard: {
     marginTop: 12,

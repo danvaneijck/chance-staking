@@ -10,7 +10,7 @@ use crate::error::ContractError;
 use crate::msg::DistributorExecuteMsg;
 use crate::state::{
     UnstakeRequest, CONFIG, EPOCH_STATE, EXCHANGE_RATE, NEXT_UNSTAKE_ID, PENDING_UNSTAKE_TOTAL,
-    TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING, UNSTAKE_REQUESTS,
+    TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING, UNSTAKE_REQUESTS, USER_STAKE_EPOCH,
 };
 
 /// 10^18 — Decimal's internal scaling factor, used for overflow-safe rate arithmetic.
@@ -81,6 +81,10 @@ pub fn stake(
     let mut epoch_state = EPOCH_STATE.load(deps.storage)?;
     epoch_state.total_staked = new_backing;
     EPOCH_STATE.save(deps.storage, &epoch_state)?;
+
+    // Record the epoch of this stake (resets on every stake so that newly added
+    // funds must also satisfy the min_epochs eligibility requirement)
+    USER_STAKE_EPOCH.save(deps.storage, &info.sender, &epoch_state.current_epoch)?;
 
     // Mint csINJ via Token Factory
     let mint_msg = create_mint_tokens_msg(
@@ -499,6 +503,7 @@ pub fn take_snapshot(
 }
 
 /// Update contract configuration. Admin only.
+#[allow(clippy::too_many_arguments)]
 pub fn update_config(
     deps: DepsMut,
     _env: Env,
@@ -506,6 +511,8 @@ pub fn update_config(
     admin: Option<String>,
     operator: Option<String>,
     protocol_fee_bps: Option<u16>,
+    min_epochs_regular: Option<u64>,
+    min_epochs_big: Option<u64>,
 ) -> Result<ContractResponse, ContractError> {
     let mut config = CONFIG.load(deps.storage)?;
 
@@ -529,6 +536,12 @@ pub fn update_config(
             });
         }
         config.protocol_fee_bps = new_fee;
+    }
+    if let Some(val) = min_epochs_regular {
+        config.min_epochs_regular = val;
+    }
+    if let Some(val) = min_epochs_big {
+        config.min_epochs_big = val;
     }
 
     CONFIG.save(deps.storage, &config)?;

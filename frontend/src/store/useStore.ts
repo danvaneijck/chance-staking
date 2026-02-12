@@ -40,6 +40,13 @@ interface ContractState {
     totalRewardsDistributed: string;
     snapshotTotalWeight: string;
     snapshotNumHolders: number;
+    minEpochsRegular: number;
+    minEpochsBig: number;
+    baseYieldBps: number;
+    regularPoolBps: number;
+    bigPoolBps: number;
+    protocolFeeBps: number;
+    stakingApr: number | null;
 }
 
 interface ConfettiState {
@@ -65,6 +72,7 @@ interface UserState {
     unstakeRequests: contracts.UnstakeRequestEntry[];
     userWins: contracts.UserWinsResponse | null;
     userWinDraws: contracts.Draw[];
+    stakeEpoch: number | null;
 }
 
 interface DrawsState {
@@ -158,6 +166,13 @@ export const useStore = create<AppState>()(
             totalRewardsDistributed: "0",
             snapshotTotalWeight: "0",
             snapshotNumHolders: 0,
+            minEpochsRegular: 0,
+            minEpochsBig: 0,
+            baseYieldBps: 500,
+            regularPoolBps: 7000,
+            bigPoolBps: 2000,
+            protocolFeeBps: 500,
+            stakingApr: null,
 
             // Confetti state
             showConfetti: false,
@@ -166,6 +181,7 @@ export const useStore = create<AppState>()(
             unstakeRequests: [],
             userWins: null,
             userWinDraws: [],
+            stakeEpoch: null,
 
             // Initial draws state
             recentDraws: [],
@@ -255,6 +271,7 @@ export const useStore = create<AppState>()(
                     unstakeRequests: [],
                     userWins: null,
                     userWinDraws: [],
+                    stakeEpoch: null,
                     error: "",
                 });
             },
@@ -283,11 +300,26 @@ export const useStore = create<AppState>()(
                         currentEpoch: epochState.current_epoch,
                         epochStartTime: epochState.epoch_start_time,
                         epochDurationSeconds: hubConfig.epoch_duration_seconds,
+                        minEpochsRegular:
+                            hubConfig.min_epochs_regular ?? 0,
+                        minEpochsBig: hubConfig.min_epochs_big ?? 0,
+                        baseYieldBps: hubConfig.base_yield_bps,
+                        regularPoolBps: hubConfig.regular_pool_bps,
+                        bigPoolBps: hubConfig.big_pool_bps,
+                        protocolFeeBps: hubConfig.protocol_fee_bps,
                         snapshotTotalWeight:
                             epochState.snapshot_total_weight || "0",
                         snapshotNumHolders:
                             epochState.snapshot_num_holders || 0,
                     });
+
+                    // Fetch on-chain staking APR in background (non-blocking)
+                    contracts
+                        .fetchStakingApr(hubConfig.validators)
+                        .then((apr) => {
+                            if (apr !== null) set({ stakingApr: apr });
+                        })
+                        .catch(() => {});
                 } catch (err: any) {
                     console.error("Failed to fetch contract data:", err);
                 }
@@ -311,8 +343,8 @@ export const useStore = create<AppState>()(
                 const { injectiveAddress } = get();
                 if (!injectiveAddress || !CONTRACTS.stakingHub) return;
                 try {
-                    const [unstakeReqs, userWins, winDraws] = await Promise.all(
-                        [
+                    const [unstakeReqs, userWins, winDraws, stakerInfo] =
+                        await Promise.all([
                             contracts.fetchUnstakeRequests(injectiveAddress),
                             CONTRACTS.rewardDistributor
                                 ? contracts.fetchUserWins(injectiveAddress)
@@ -322,12 +354,13 @@ export const useStore = create<AppState>()(
                                       injectiveAddress,
                                   )
                                 : [],
-                        ],
-                    );
+                            contracts.fetchStakerInfo(injectiveAddress),
+                        ]);
                     set({
                         unstakeRequests: unstakeReqs,
                         userWins: userWins,
                         userWinDraws: winDraws || [],
+                        stakeEpoch: stakerInfo.stake_epoch,
                     });
                 } catch (err: any) {
                     console.error("Failed to fetch user data:", err);
@@ -415,6 +448,7 @@ export const useStore = create<AppState>()(
                     await Promise.all([
                         get().fetchBalances(),
                         get().fetchContractData(),
+                        get().fetchUserData(),
                     ]);
                 } catch (err: any) {
                     set({ error: err?.message || "Stake failed" });

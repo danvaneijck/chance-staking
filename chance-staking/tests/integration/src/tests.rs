@@ -82,6 +82,8 @@ fn hub_instantiate_msg() -> chance_staking_hub::msg::InstantiateMsg {
         regular_pool_bps: 7000,
         big_pool_bps: 2000,
         csinj_subdenom: "csINJ".to_string(),
+        min_epochs_regular: 0,
+        min_epochs_big: 0,
     }
 }
 
