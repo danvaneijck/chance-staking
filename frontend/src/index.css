@@ -244,6 +244,9 @@ input:focus, textarea:focus {
   .header-wallet-desktop {
     display: none !important;
   }
+  .header-rpc-desktop {
+    display: none !important;
+  }
   .header-burger {
     display: flex !important;
   }

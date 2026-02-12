@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Sparkles, ChevronDown, Wallet, LogOut, Copy, Check, Menu, X } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import type { WalletType } from '../store/useStore'
+import RpcSelector from './RpcSelector'
+import RpcModal from './RpcModal'
 
 const navLinks = [
   { href: '#/stake', label: 'Stake' },
@@ -70,10 +72,10 @@ export default function Header() {
   }, [mobileMenuOpen])
 
   const wallets: { id: WalletType; name: string; icon: string }[] = [
-    { id: 'keplr', name: 'Keplr', icon: '🔑' },
-    { id: 'leap', name: 'Leap', icon: '🦘' },
-    { id: 'metamask', name: 'MetaMask', icon: '🦊' },
-    { id: 'rabby', name: 'Rabby', icon: '🐰' },
+    { id: 'keplr', name: 'Keplr', icon: '/wallets/keplr.svg' },
+    { id: 'leap', name: 'Leap', icon: '/wallets/leap.svg' },
+    { id: 'metamask', name: 'MetaMask', icon: '/wallets/metamask.svg' },
+    { id: 'rabby', name: 'Rabby', icon: '/wallets/rabby.svg' },
   ]
 
   const handleNavClick = () => {
@@ -113,6 +115,11 @@ export default function Header() {
             ))}
           </nav>
 
+          {/* Desktop RPC selector */}
+          <div className="header-rpc-desktop">
+            <RpcSelector />
+          </div>
+
           {/* Desktop wallet section */}
           <div className="header-wallet-desktop" style={styles.walletSection}>
             {!isConnected ? (
@@ -142,7 +149,7 @@ export default function Header() {
                           (e.currentTarget as HTMLButtonElement).style.background = 'transparent'
                         }}
                       >
-                        <span style={styles.walletIcon}>{w.icon}</span>
+                        <img src={w.icon} alt={w.name} style={styles.walletIcon} />
                         <span>{w.name}</span>
                       </button>
                     ))}
@@ -266,6 +273,13 @@ export default function Header() {
 
         <div style={styles.mobileDrawerDivider} />
 
+        {/* Mobile RPC selector */}
+        <div style={{ padding: '12px 20px' }}>
+          <RpcSelector />
+        </div>
+
+        <div style={styles.mobileDrawerDivider} />
+
         {/* Mobile wallet section */}
         <div style={styles.mobileWalletSection}>
           {!isConnected ? (
@@ -281,7 +295,7 @@ export default function Header() {
                       setMobileMenuOpen(false)
                     }}
                   >
-                    <span style={{ fontSize: 22 }}>{w.icon}</span>
+                    <img src={w.icon} alt={w.name} style={{ width: 28, height: 28, borderRadius: 6 }} />
                     <span style={{ fontSize: 13, fontWeight: 500, color: '#F0F0F5' }}>{w.name}</span>
                   </button>
                 ))}
@@ -331,6 +345,8 @@ export default function Header() {
           )}
         </div>
       </div>
+
+      <RpcModal />
     </>
   )
 }
@@ -450,7 +466,9 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'background 0.15s',
   },
   walletIcon: {
-    fontSize: 18,
+    width: 22,
+    height: 22,
+    borderRadius: 6,
   },
   accountButton: {
     display: 'flex',

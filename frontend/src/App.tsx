@@ -1,5 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { useStore } from './store/useStore'
+import { setMsgBroadcasterEndpoints } from './store/useStore'
+import { useRpcStore } from './store/rpcStore'
+import { setGrpcEndpoint } from './services/contracts'
 import Header from './components/Header'
 import HeroSection from './components/HeroSection'
 import StakingPanel from './components/StakingPanel'
@@ -114,6 +117,26 @@ function App() {
       fetchUserData()
     }
   }, [isConnected])
+
+  // Sync gRPC endpoint from rpcStore (on mount + when user switches)
+  const activeEndpoint = useRpcStore((s) => s.endpoints[s.activeIndex])
+  const activeGrpc = activeEndpoint?.grpc
+  const prevGrpcRef = useRef(activeGrpc)
+  useEffect(() => {
+    if (!activeGrpc) return
+    setGrpcEndpoint(activeGrpc)
+    setMsgBroadcasterEndpoints({ grpc: activeGrpc })
+    // Refetch data when endpoint actually changes (skip initial mount — handled above)
+    if (prevGrpcRef.current && prevGrpcRef.current !== activeGrpc) {
+      fetchContractData()
+      fetchDraws()
+      if (isConnected) {
+        fetchBalances()
+        fetchUserData()
+      }
+    }
+    prevGrpcRef.current = activeGrpc
+  }, [activeGrpc])
 
   // Poll for fresh data every 30s
   useEffect(() => {

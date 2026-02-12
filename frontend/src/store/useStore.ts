@@ -123,13 +123,27 @@ const walletStrategy = new WalletStrategy({
     strategies: {},
 });
 
-const msgBroadcaster = new MsgBroadcaster({
+let msgBroadcaster = new MsgBroadcaster({
     walletStrategy,
     simulateTx: true,
     network: NETWORK,
     endpoints: getNetworkEndpoints(NETWORK),
     gasBufferCoefficient: 1.1,
 });
+
+export function setMsgBroadcasterEndpoints(overrides: {
+    grpc?: string;
+    rest?: string;
+}) {
+    const base = getNetworkEndpoints(NETWORK);
+    msgBroadcaster = new MsgBroadcaster({
+        walletStrategy,
+        simulateTx: true,
+        network: NETWORK,
+        endpoints: { ...base, ...overrides },
+        gasBufferCoefficient: 1.1,
+    });
+}
 
 const WALLET_MAP: Record<WalletType, Wallet> = {
     metamask: Wallet.Metamask,
