@@ -8,12 +8,19 @@ import {
 } from "@injectivelabs/sdk-ts";
 import { CONTRACTS, ENDPOINTS, INJ_DENOM, getCsinjDenom } from "../config";
 
-// ---------- API instances ----------
-const wasmApi = new ChainGrpcWasmApi(ENDPOINTS.grpc);
-const bankApi = new ChainGrpcBankApi(ENDPOINTS.grpc);
-const stakingApi = new ChainGrpcStakingApi(ENDPOINTS.grpc);
-const mintApi = new ChainGrpcMintApi(ENDPOINTS.grpc);
+// ---------- API instances (reinitializable for RPC switching) ----------
+let wasmApi = new ChainGrpcWasmApi(ENDPOINTS.grpc);
+let bankApi = new ChainGrpcBankApi(ENDPOINTS.grpc);
+let stakingApi = new ChainGrpcStakingApi(ENDPOINTS.grpc);
+let mintApi = new ChainGrpcMintApi(ENDPOINTS.grpc);
 const explorerApi = new IndexerGrpcExplorerApi(ENDPOINTS.indexer);
+
+export function setGrpcEndpoint(grpc: string) {
+    wasmApi = new ChainGrpcWasmApi(grpc);
+    bankApi = new ChainGrpcBankApi(grpc);
+    stakingApi = new ChainGrpcStakingApi(grpc);
+    mintApi = new ChainGrpcMintApi(grpc);
+}
 
 // ---------- Types ----------
 export interface ExchangeRateResponse {
