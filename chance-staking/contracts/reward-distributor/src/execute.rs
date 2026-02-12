@@ -9,7 +9,8 @@ use sha2::{Digest, Sha256};
 use crate::error::ContractError;
 use crate::msg::{CommitDrawParams, OracleQueryMsg, RevealDrawParams, UpdateConfigParams};
 use crate::state::{
-    Draw, Snapshot, CONFIG, DRAWS, DRAW_STATE, SNAPSHOTS, USER_TOTAL_WON, USER_WINS, USER_WIN_COUNT,
+    Draw, Snapshot, CONFIG, DRAWS, DRAW_STATE, LATEST_SNAPSHOT_EPOCH, SNAPSHOTS, USER_TOTAL_WON,
+    USER_WINS, USER_WIN_COUNT,
 };
 
 /// Fund the regular draw pool. Only staking hub can call.
@@ -107,6 +108,11 @@ pub fn set_snapshot(
         });
     }
 
+    // M-01 FIX: Prevent overwriting existing snapshots
+    if SNAPSHOTS.has(deps.storage, epoch) {
+        return Err(ContractError::SnapshotAlreadyExists { epoch });
+    }
+
     let snapshot = Snapshot {
         epoch,
         merkle_root: merkle_root.clone(),
@@ -115,6 +121,9 @@ pub fn set_snapshot(
         submitted_at: env.block.time,
     };
     SNAPSHOTS.save(deps.storage, epoch, &snapshot)?;
+
+    // H-02 FIX: Track latest snapshot epoch
+    LATEST_SNAPSHOT_EPOCH.save(deps.storage, &epoch)?;
 
     Ok(Response::new()
         .add_attribute("action", "set_snapshot")
@@ -154,6 +163,21 @@ pub fn commit_draw(
     // Verify snapshot exists for this epoch
     if !SNAPSHOTS.has(deps.storage, epoch) {
         return Err(ContractError::NoSnapshot);
+    }
+
+    // H-02 FIX: Verify epoch is the latest snapshot epoch
+    let latest_epoch = LATEST_SNAPSHOT_EPOCH.may_load(deps.storage)?.unwrap_or(0);
+    if epoch != latest_epoch {
+        return Err(ContractError::InvalidEpoch {
+            provided: epoch,
+            latest: latest_epoch,
+        });
+    }
+
+    // H-03 FIX: Load snapshot and check for zero total_weight
+    let snapshot = SNAPSHOTS.load(deps.storage, epoch)?;
+    if snapshot.total_weight.is_zero() {
+        return Err(ContractError::ZeroWeight);
     }
 
     let mut state = DRAW_STATE.load(deps.storage)?;
@@ -374,6 +398,19 @@ pub fn reveal_draw(
 
     // 7. Send reward to winner
     let winner_addr = deps.api.addr_validate(&winner_address)?;
+
+    // L-05 FIX: Verify contract has sufficient balance before sending
+    let contract_balance = deps
+        .querier
+        .query_balance(&env.contract.address, "inj")?
+        .amount;
+    if contract_balance < draw.reward_amount {
+        return Err(ContractError::InsufficientContractBalance {
+            required: draw.reward_amount,
+            available: contract_balance,
+        });
+    }
+
     let send_msg = BankMsg::Send {
         to_address: winner_address.clone(),
         amount: coins(draw.reward_amount.u128(), "inj"),

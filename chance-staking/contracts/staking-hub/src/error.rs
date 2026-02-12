@@ -56,4 +56,8 @@ pub enum ContractError {
 
     #[error("insufficient contract balance for claim")]
     InsufficientBalance,
+
+    // M-04 FIX: Invalid validator address error
+    #[error("invalid validator address {address}: {reason}")]
+    InvalidValidatorAddress { address: String, reason: String },
 }

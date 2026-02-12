@@ -1,9 +1,9 @@
 use cosmwasm_std::{entry_point, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult};
-use cw2::set_contract_version;
+use cw2::{get_contract_version, set_contract_version};
 
 use crate::error::ContractError;
 use crate::execute;
-use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 use crate::query;
 use crate::state::{OracleConfig, CONFIG, LATEST_ROUND};
 
@@ -69,6 +69,7 @@ pub fn execute(
         ExecuteMsg::UpdateOperators { add, remove } => {
             execute::update_operators(deps, env, info, add, remove)
         }
+        ExecuteMsg::UpdateAdmin { new_admin } => execute::update_admin(deps, env, info, new_admin),
     }
 }
 
@@ -79,6 +80,24 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         QueryMsg::Beacon { round } => query::query_beacon(deps, round),
         QueryMsg::LatestRound {} => query::query_latest_round(deps),
     }
+}
+
+// M-03 FIX: Add migrate entry point for contract upgradability
+#[entry_point]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    let stored = get_contract_version(deps.storage)?;
+    if stored.contract != CONTRACT_NAME {
+        return Err(ContractError::Unauthorized {
+            reason: "Cannot migrate from different contract type".to_string(),
+        });
+    }
+
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "migrate")
+        .add_attribute("from_version", stored.version)
+        .add_attribute("to_version", CONTRACT_VERSION))
 }
 
 #[cfg(test)]

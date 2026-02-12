@@ -154,16 +154,17 @@ pub fn unstake(
     let inj_amount = csinj_amount.multiply_ratio(rate_atomics, Uint128::new(DECIMAL_FRACTIONAL));
 
     // Update totals
+    // H-04 FIX: Use proper error handling instead of silent underflow
     let new_backing = TOTAL_INJ_BACKING
         .load(deps.storage)?
         .checked_sub(inj_amount)
-        .unwrap_or(Uint128::zero());
+        .map_err(|_| ContractError::InsufficientBalance)?;
     TOTAL_INJ_BACKING.save(deps.storage, &new_backing)?;
 
     let new_supply = TOTAL_CSINJ_SUPPLY
         .load(deps.storage)?
         .checked_sub(csinj_amount)
-        .unwrap_or(Uint128::zero());
+        .map_err(|_| ContractError::InsufficientBalance)?;
     TOTAL_CSINJ_SUPPLY.save(deps.storage, &new_supply)?;
 
     // Update epoch total staked
@@ -259,13 +260,12 @@ pub fn claim_unstaked(
     }
 
     // Update pending unstake counter (O(1) instead of iterating all requests)
+    // H-04 FIX: Use proper error handling instead of silent underflow
     let pending_total = PENDING_UNSTAKE_TOTAL.load(deps.storage)?;
-    PENDING_UNSTAKE_TOTAL.save(
-        deps.storage,
-        &pending_total
-            .checked_sub(total_claim)
-            .unwrap_or(Uint128::zero()),
-    )?;
+    let new_pending = pending_total
+        .checked_sub(total_claim)
+        .map_err(|_| ContractError::InsufficientBalance)?;
+    PENDING_UNSTAKE_TOTAL.save(deps.storage, &new_pending)?;
 
     let send_msg = BankMsg::Send {
         to_address: info.sender.to_string(),
@@ -347,6 +347,14 @@ pub fn distribute_rewards(
 
     let mut epoch_state = EPOCH_STATE.load(deps.storage)?;
 
+    // H-01 FIX: Enforce epoch duration before allowing distribution
+    let epoch_end_time = epoch_state
+        .epoch_start_time
+        .plus_seconds(config.epoch_duration_seconds);
+    if env.block.time < epoch_end_time {
+        return Err(ContractError::EpochNotReady);
+    }
+
     // Query this contract's current INJ balance
     let contract_balance = query_contract_inj_balance(deps.querier, &env)?;
 
@@ -359,7 +367,21 @@ pub fn distribute_rewards(
     let regular_amount = total_rewards.multiply_ratio(config.regular_pool_bps as u128, 10000u128);
     let big_amount = total_rewards.multiply_ratio(config.big_pool_bps as u128, 10000u128);
     let base_yield = total_rewards.multiply_ratio(config.base_yield_bps as u128, 10000u128);
-    let treasury_fee = total_rewards.multiply_ratio(config.protocol_fee_bps as u128, 10000u128);
+    // L-04 FIX: Calculate treasury_fee as remainder to eliminate rounding dust
+    let treasury_fee = total_rewards
+        .checked_sub(regular_amount)
+        .unwrap_or(Uint128::zero())
+        .checked_sub(big_amount)
+        .unwrap_or(Uint128::zero())
+        .checked_sub(base_yield)
+        .unwrap_or(Uint128::zero());
+
+    // C-01 FIX: Delegate base yield to validators (prevents double-counting in future epochs)
+    let base_yield_delegate_msgs = if !base_yield.is_zero() {
+        create_delegation_msgs(&config.validators, base_yield)?
+    } else {
+        vec![]
+    };
 
     // Update exchange rate with base yield
     let total_backing = TOTAL_INJ_BACKING.load(deps.storage)?;
@@ -418,6 +440,11 @@ pub fn distribute_rewards(
             amount: coins(treasury_fee.u128(), "inj"),
         };
         response = response.add_message(treasury_msg);
+    }
+
+    // C-01 FIX: Delegate base yield INJ to validators
+    for msg in base_yield_delegate_msgs {
+        response = response.add_message(msg);
     }
 
     response = response.add_event(
@@ -511,6 +538,9 @@ pub fn update_config(
     admin: Option<String>,
     operator: Option<String>,
     protocol_fee_bps: Option<u16>,
+    base_yield_bps: Option<u16>,
+    regular_pool_bps: Option<u16>,
+    big_pool_bps: Option<u16>,
     min_epochs_regular: Option<u64>,
     min_epochs_big: Option<u64>,
 ) -> Result<ContractResponse, ContractError> {
@@ -537,11 +567,36 @@ pub fn update_config(
         }
         config.protocol_fee_bps = new_fee;
     }
+    if let Some(new_base) = base_yield_bps {
+        config.base_yield_bps = new_base;
+    }
+    if let Some(new_regular) = regular_pool_bps {
+        config.regular_pool_bps = new_regular;
+    }
+    if let Some(new_big) = big_pool_bps {
+        config.big_pool_bps = new_big;
+    }
     if let Some(val) = min_epochs_regular {
         config.min_epochs_regular = val;
     }
     if let Some(val) = min_epochs_big {
         config.min_epochs_big = val;
+    }
+
+    // C-02 FIX: Validate that all BPS fields sum to exactly 10000
+    let total_bps = config.regular_pool_bps as u32
+        + config.big_pool_bps as u32
+        + config.base_yield_bps as u32
+        + config.protocol_fee_bps as u32;
+
+    if total_bps != 10000 {
+        return Err(ContractError::BpsSumMismatch {
+            regular: config.regular_pool_bps,
+            big: config.big_pool_bps,
+            base_yield: config.base_yield_bps,
+            fee: config.protocol_fee_bps,
+            total: total_bps as u16,
+        });
     }
 
     CONFIG.save(deps.storage, &config)?;
@@ -567,7 +622,9 @@ pub fn update_validators(
     }
 
     // First add new validators so they can receive redelegations
+    // M-04 FIX: Validate new validator addresses
     for v in &add {
+        validate_validator_address(v)?;
         if !config.validators.contains(v) {
             config.validators.push(v.clone());
         }
@@ -607,6 +664,82 @@ pub fn update_validators(
     );
 
     Ok(response)
+}
+
+/// H-05 FIX: Sync TOTAL_INJ_BACKING with actual validator delegations.
+/// Call this after slashing events to reconcile accounting.
+/// Operator only.
+pub fn sync_delegations(
+    deps: DepsMut,
+    env: Env,
+    info: MessageInfo,
+) -> Result<ContractResponse, ContractError> {
+    let config = CONFIG.load(deps.storage)?;
+
+    if info.sender != config.operator {
+        return Err(ContractError::Unauthorized {
+            reason: "only operator can sync delegations".to_string(),
+        });
+    }
+
+    // Query actual delegated amounts from all validators
+    let mut total_delegated = Uint128::zero();
+    for validator in &config.validators {
+        let delegation = deps
+            .querier
+            .query_delegation(&env.contract.address, validator)?;
+        if let Some(del) = delegation {
+            total_delegated += del.amount.amount;
+        }
+    }
+
+    let old_backing = TOTAL_INJ_BACKING.load(deps.storage)?;
+    let difference = old_backing.saturating_sub(total_delegated);
+
+    // Update backing to match actual delegations
+    TOTAL_INJ_BACKING.save(deps.storage, &total_delegated)?;
+
+    // Recompute exchange rate
+    let total_supply = TOTAL_CSINJ_SUPPLY.load(deps.storage)?;
+    let new_rate = if total_supply.is_zero() {
+        Decimal::one()
+    } else {
+        Decimal::from_ratio(total_delegated, total_supply)
+    };
+    EXCHANGE_RATE.save(deps.storage, &new_rate)?;
+
+    Ok(ContractResponse::new()
+        .add_attribute("action", "sync_delegations")
+        .add_attribute("old_backing", old_backing.to_string())
+        .add_attribute("new_backing", total_delegated.to_string())
+        .add_attribute("slashed_amount", difference.to_string())
+        .add_attribute("new_exchange_rate", new_rate.to_string())
+        .add_event(
+            Event::new("chance_delegations_synced")
+                .add_attribute("slashed_amount", difference.to_string())
+                .add_attribute("new_backing", total_delegated.to_string())
+                .add_attribute("new_rate", new_rate.to_string()),
+        ))
+}
+
+/// M-04 FIX: Helper to validate validator addresses
+pub fn validate_validator_address(addr: &str) -> Result<(), ContractError> {
+    if !addr.starts_with("injvaloper") {
+        return Err(ContractError::InvalidValidatorAddress {
+            address: addr.to_string(),
+            reason: "must start with 'injvaloper'".to_string(),
+        });
+    }
+
+    // Basic length check (bech32 addresses should be reasonable length)
+    if addr.len() < 20 || addr.len() > 100 {
+        return Err(ContractError::InvalidValidatorAddress {
+            address: addr.to_string(),
+            reason: "invalid length".to_string(),
+        });
+    }
+
+    Ok(())
 }
 
 /// Helper: create delegation messages distributing INJ across validators (round-robin).

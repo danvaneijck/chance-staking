@@ -7,6 +7,8 @@ pub const CONFIG: Item<DistributorConfig> = Item::new("config");
 pub const DRAW_STATE: Item<DrawStateInfo> = Item::new("draw_state");
 pub const DRAWS: Map<u64, Draw> = Map::new("draws");
 pub const SNAPSHOTS: Map<u64, Snapshot> = Map::new("snapshots");
+// H-02 FIX: Track latest snapshot epoch to prevent old epoch usage in draws
+pub const LATEST_SNAPSHOT_EPOCH: Item<u64> = Item::new("latest_snapshot_epoch");
 
 /// Per-user win tracking.
 /// Each entry is keyed by (user_addr, draw_id) for O(1) writes instead of

@@ -1,5 +1,9 @@
 use cosmwasm_schema::{cw_serde, QueryResponses};
 
+// M-03 FIX: Add MigrateMsg for contract upgradability
+#[cw_serde]
+pub struct MigrateMsg {}
+
 use crate::state::{OracleConfig, StoredBeacon};
 
 #[cw_serde]
@@ -25,6 +29,8 @@ pub enum ExecuteMsg {
         add: Vec<String>,
         remove: Vec<String>,
     },
+    /// Update admin address (admin only).
+    UpdateAdmin { new_admin: String },
 }
 
 #[cw_serde]

@@ -106,3 +106,27 @@ pub fn update_operators(
         .add_attribute("action", "update_operators")
         .add_attribute("added", add.join(",")))
 }
+
+/// L-01 FIX: Update admin address. Admin only.
+pub fn update_admin(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+    new_admin: String,
+) -> Result<Response, ContractError> {
+    let mut config = CONFIG.load(deps.storage)?;
+
+    if info.sender != config.admin {
+        return Err(ContractError::Unauthorized {
+            reason: "only admin can update admin".to_string(),
+        });
+    }
+
+    let new_admin_addr = deps.api.addr_validate(&new_admin)?;
+    config.admin = new_admin_addr.clone();
+    CONFIG.save(deps.storage, &config)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "update_admin")
+        .add_attribute("new_admin", new_admin_addr.to_string()))
+}

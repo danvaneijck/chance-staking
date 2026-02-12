@@ -1,12 +1,13 @@
 use cosmwasm_std::{
     entry_point, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128,
 };
-use cw2::set_contract_version;
+use cw2::{get_contract_version, set_contract_version};
 
 use crate::error::ContractError;
 use crate::execute;
 use crate::msg::{
-    CommitDrawParams, ExecuteMsg, InstantiateMsg, QueryMsg, RevealDrawParams, UpdateConfigParams,
+    CommitDrawParams, ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg, RevealDrawParams,
+    UpdateConfigParams,
 };
 use crate::query;
 use crate::state::{DistributorConfig, DrawStateInfo, CONFIG, DRAW_STATE};
@@ -169,6 +170,24 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
         ),
         QueryMsg::Snapshot { epoch } => query::query_snapshot(deps, epoch),
     }
+}
+
+// M-03 FIX: Add migrate entry point for contract upgradability
+#[entry_point]
+pub fn migrate(deps: DepsMut, _env: Env, _msg: MigrateMsg) -> Result<Response, ContractError> {
+    let stored = get_contract_version(deps.storage)?;
+    if stored.contract != CONTRACT_NAME {
+        return Err(ContractError::Unauthorized {
+            reason: "Cannot migrate from different contract type".to_string(),
+        });
+    }
+
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "migrate")
+        .add_attribute("from_version", stored.version)
+        .add_attribute("to_version", CONTRACT_VERSION))
 }
 
 #[cfg(test)]
