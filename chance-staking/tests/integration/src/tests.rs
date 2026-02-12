@@ -89,6 +89,7 @@ fn hub_instantiate_msg() -> chance_staking_hub::msg::InstantiateMsg {
         csinj_subdenom: "csINJ".to_string(),
         min_epochs_regular: 0,
         min_epochs_big: 0,
+        min_stake_amount: Uint128::zero(),
     }
 }
 
@@ -675,7 +676,7 @@ fn test_full_stake_and_draw_cycle() {
     // ── Step 2: Setup distributor with custom wasm querier ──
     let mut dist_deps = mock_dependencies();
 
-    // Configure the mock querier to respond to drand oracle beacon queries
+    // Configure the mock querier to respond to drand oracle and staking hub queries
     let beacon_binary = beacon_query_res.clone();
     dist_deps.querier.update_wasm(move |query| {
         match query {
@@ -684,12 +685,33 @@ fn test_full_stake_and_draw_cycle() {
                 let parsed: Result<chance_reward_distributor::msg::OracleQueryMsg, _> =
                     from_json(msg);
                 if let Ok(chance_reward_distributor::msg::OracleQueryMsg::Beacon { .. }) = parsed {
-                    SystemResult::Ok(ContractResult::Ok(beacon_binary.clone()))
-                } else {
-                    SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+                    return SystemResult::Ok(ContractResult::Ok(beacon_binary.clone()));
+                }
+
+                // Try to parse as staking hub query
+                let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                    from_json(msg);
+                match parsed {
+                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                        let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                            min_epochs_regular: 0,
+                            min_epochs_big: 0,
+                        };
+                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
+                    }
+                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo {
+                        address,
+                    }) => {
+                        let info = chance_reward_distributor::msg::StakerInfoResponse {
+                            address,
+                            stake_epoch: Some(0),
+                        };
+                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                    }
+                    _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
                         error: "Unknown query".to_string(),
                         request: Default::default(),
-                    })
+                    }),
                 }
             }
             _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
@@ -953,7 +975,31 @@ fn test_multiple_draws_across_epochs() {
     .unwrap();
 
     dist_deps.querier.update_wasm(move |query| match query {
-        WasmQuery::Smart { .. } => SystemResult::Ok(ContractResult::Ok(beacon_response.clone())),
+        WasmQuery::Smart { msg, .. } => {
+            // Try staking hub queries first
+            let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                from_json(msg);
+            match parsed {
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                    let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                        min_epochs_regular: 0,
+                        min_epochs_big: 0,
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
+                }
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo { address }) => {
+                    let info = chance_reward_distributor::msg::StakerInfoResponse {
+                        address,
+                        stake_epoch: Some(0),
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                }
+                _ => {
+                    // Default: return beacon response (for oracle queries)
+                    SystemResult::Ok(ContractResult::Ok(beacon_response.clone()))
+                }
+            }
+        }
         _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
             error: "Only smart queries supported".to_string(),
             request: Default::default(),
@@ -1318,6 +1364,7 @@ fn test_bps_sum_validation_in_update_config() {
             big_pool_bps: None,
             min_epochs_regular: None,
             min_epochs_big: None,
+            min_stake_amount: None,
         },
     )
     .unwrap_err();
@@ -1344,6 +1391,7 @@ fn test_bps_sum_validation_in_update_config() {
             big_pool_bps: None,
             min_epochs_regular: None,
             min_epochs_big: None,
+            min_stake_amount: None,
         },
     );
     assert!(res.is_ok(), "Valid BPS sum should succeed");
@@ -1633,4 +1681,3944 @@ fn test_cross_contract_balance_reconciliation() {
     assert_eq!(rate4.total_inj_backing, Uint128::from(120_000_000u128));
 
     eprintln!("test_cross_contract_balance_reconciliation passed");
+}
+
+#[test]
+fn test_reveal_draw_rejects_ineligible_winner() {
+    // Test that reveal_draw rejects a winner who doesn't meet min_epochs eligibility.
+    // Scenario: min_epochs_regular=2, winner staked at epoch 1, draw is for epoch 1
+    // → epochs_staked = 1 - 1 = 0, which is < 2 → should be rejected.
+
+    // ── Step 1: Setup oracle and get beacon ──
+    let mut oracle_deps = mock_dependencies();
+    setup_oracle(&mut oracle_deps);
+
+    let operator = oracle_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_drand_oracle::contract::execute(
+        oracle_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::SubmitBeacon {
+            round: TEST_ROUND,
+            signature_hex: TEST_SIG_HEX.to_string(),
+        },
+    )
+    .unwrap();
+
+    let beacon_query_res = chance_drand_oracle::contract::query(
+        oracle_deps.as_ref(),
+        mock_env(),
+        chance_drand_oracle::msg::QueryMsg::Beacon { round: TEST_ROUND },
+    )
+    .unwrap();
+
+    // ── Step 2: Setup distributor with mock querier ──
+    // Mock returns min_epochs_regular=2 and stake_epoch=1 for all stakers
+    let mut dist_deps = mock_dependencies();
+    let beacon_binary = beacon_query_res.clone();
+    dist_deps.querier.update_wasm(move |query| {
+        match query {
+            WasmQuery::Smart { msg, .. } => {
+                let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                    from_json(msg);
+                match parsed {
+                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                        let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                            min_epochs_regular: 2,
+                            min_epochs_big: 6,
+                        };
+                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
+                    }
+                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo {
+                        address,
+                    }) => {
+                        // Winner staked at epoch 1
+                        let info = chance_reward_distributor::msg::StakerInfoResponse {
+                            address,
+                            stake_epoch: Some(1),
+                        };
+                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                    }
+                    _ => {
+                        // Oracle beacon query
+                        SystemResult::Ok(ContractResult::Ok(beacon_binary.clone()))
+                    }
+                }
+            }
+            _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+                error: "Only smart queries supported".to_string(),
+                request: Default::default(),
+            }),
+        }
+    });
+
+    setup_distributor(&mut dist_deps);
+
+    // ── Step 3: Fund pool and set snapshot ──
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(50_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap();
+
+    // Build merkle tree with one user
+    let addr_a = dist_deps.api.addr_make("user_a").to_string();
+    let leaf_a = compute_leaf_hash(&addr_a, 0, 100);
+    let root_hex = hex::encode(leaf_a);
+
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 1,
+            merkle_root: root_hex.clone(),
+            total_weight: Uint128::from(100u128),
+            num_holders: 1,
+        },
+    )
+    .unwrap();
+
+    // ── Step 4: Commit draw for epoch 1 ──
+    let secret = b"eligibility_test_secret";
+    let commit: [u8; 32] = Sha256::digest(secret).into();
+
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Regular,
+            operator_commit: hex::encode(commit),
+            target_drand_round: TEST_ROUND,
+            epoch: 1,
+        },
+    )
+    .unwrap();
+
+    // ── Step 5: Try to reveal — should fail with WinnerNotEligible ──
+    let env = mock_env();
+    dist_deps.querier.bank.update_balance(
+        &env.contract.address,
+        vec![Coin::new(50_000_000u128, "inj")],
+    );
+
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        env,
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::RevealDraw {
+            draw_id: 0,
+            operator_secret_hex: hex::encode(secret),
+            winner_address: addr_a.clone(),
+            winner_cumulative_start: Uint128::zero(),
+            winner_cumulative_end: Uint128::from(100u128),
+            merkle_proof: vec![], // single leaf = empty proof
+        },
+    )
+    .unwrap_err();
+
+    assert!(
+        format!("{:?}", err).contains("WinnerNotEligible"),
+        "Should reject ineligible winner, got: {:?}",
+        err
+    );
+
+    eprintln!("test_reveal_draw_rejects_ineligible_winner passed");
+}
+
+#[test]
+fn test_reveal_draw_accepts_eligible_winner() {
+    // Test that reveal_draw succeeds when winner meets min_epochs eligibility.
+    // Scenario: min_epochs_regular=2, winner staked at epoch 1, draw is for epoch 3
+    // → epochs_staked = 3 - 1 = 2, which is >= 2 → should succeed.
+
+    let mut oracle_deps = mock_dependencies();
+    setup_oracle(&mut oracle_deps);
+
+    let operator = oracle_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_drand_oracle::contract::execute(
+        oracle_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::SubmitBeacon {
+            round: TEST_ROUND,
+            signature_hex: TEST_SIG_HEX.to_string(),
+        },
+    )
+    .unwrap();
+
+    let beacon_query_res = chance_drand_oracle::contract::query(
+        oracle_deps.as_ref(),
+        mock_env(),
+        chance_drand_oracle::msg::QueryMsg::Beacon { round: TEST_ROUND },
+    )
+    .unwrap();
+
+    let mut dist_deps = mock_dependencies();
+    let beacon_binary = beacon_query_res.clone();
+    dist_deps.querier.update_wasm(move |query| {
+        match query {
+            WasmQuery::Smart { msg, .. } => {
+                let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                    from_json(msg);
+                match parsed {
+                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                        let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                            min_epochs_regular: 2,
+                            min_epochs_big: 6,
+                        };
+                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
+                    }
+                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo {
+                        address,
+                    }) => {
+                        // Winner staked at epoch 1
+                        let info = chance_reward_distributor::msg::StakerInfoResponse {
+                            address,
+                            stake_epoch: Some(1),
+                        };
+                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                    }
+                    _ => SystemResult::Ok(ContractResult::Ok(beacon_binary.clone())),
+                }
+            }
+            _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+                error: "Only smart queries supported".to_string(),
+                request: Default::default(),
+            }),
+        }
+    });
+
+    setup_distributor(&mut dist_deps);
+
+    // Fund pool
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(50_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap();
+
+    // Build merkle tree with one user
+    let addr_a = dist_deps.api.addr_make("user_a").to_string();
+    let leaf_a = compute_leaf_hash(&addr_a, 0, 100);
+    let root_hex = hex::encode(leaf_a);
+
+    // Set snapshot for epoch 3 (winner staked at epoch 1, so 3-1=2 >= min_epochs_regular=2)
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 3,
+            merkle_root: root_hex.clone(),
+            total_weight: Uint128::from(100u128),
+            num_holders: 1,
+        },
+    )
+    .unwrap();
+
+    // Commit draw for epoch 3
+    let secret = b"eligibility_test_secret";
+    let commit: [u8; 32] = Sha256::digest(secret).into();
+
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Regular,
+            operator_commit: hex::encode(commit),
+            target_drand_round: TEST_ROUND,
+            epoch: 3,
+        },
+    )
+    .unwrap();
+
+    // Reveal — should succeed
+    let env = mock_env();
+    dist_deps.querier.bank.update_balance(
+        &env.contract.address,
+        vec![Coin::new(50_000_000u128, "inj")],
+    );
+
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let res = chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        env,
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::RevealDraw {
+            draw_id: 0,
+            operator_secret_hex: hex::encode(secret),
+            winner_address: addr_a.clone(),
+            winner_cumulative_start: Uint128::zero(),
+            winner_cumulative_end: Uint128::from(100u128),
+            merkle_proof: vec![],
+        },
+    );
+
+    assert!(
+        res.is_ok(),
+        "Eligible winner should succeed, got: {:?}",
+        res.unwrap_err()
+    );
+
+    eprintln!("test_reveal_draw_accepts_eligible_winner passed");
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Audit V2 — Additional test coverage
+// ────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_big_pool_draw_cycle() {
+    // Full commit-reveal cycle for a big pool draw.
+    // Verifies big pool balance, last_big_draw_epoch tracking, and payout.
+
+    let mut oracle_deps = mock_dependencies();
+    setup_oracle(&mut oracle_deps);
+
+    let operator = oracle_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_drand_oracle::contract::execute(
+        oracle_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::SubmitBeacon {
+            round: TEST_ROUND,
+            signature_hex: TEST_SIG_HEX.to_string(),
+        },
+    )
+    .unwrap();
+
+    let beacon_query_res = chance_drand_oracle::contract::query(
+        oracle_deps.as_ref(),
+        mock_env(),
+        chance_drand_oracle::msg::QueryMsg::Beacon { round: TEST_ROUND },
+    )
+    .unwrap();
+
+    let mut dist_deps = mock_dependencies();
+    let beacon_binary = beacon_query_res.clone();
+    dist_deps.querier.update_wasm(move |query| match query {
+        WasmQuery::Smart { msg, .. } => {
+            let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                from_json(msg);
+            match parsed {
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                    let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                        min_epochs_regular: 0,
+                        min_epochs_big: 0,
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
+                }
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo { address }) => {
+                    let info = chance_reward_distributor::msg::StakerInfoResponse {
+                        address,
+                        stake_epoch: Some(0),
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                }
+                _ => SystemResult::Ok(ContractResult::Ok(beacon_binary.clone())),
+            }
+        }
+        _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+            error: "Only smart queries supported".to_string(),
+            request: Default::default(),
+        }),
+    });
+
+    setup_distributor(&mut dist_deps);
+
+    // Fund the BIG pool
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(200_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundBigPool {},
+    )
+    .unwrap();
+
+    // Verify big pool balance
+    let state: chance_reward_distributor::state::DrawStateInfo = from_json(
+        chance_reward_distributor::contract::query(
+            dist_deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::DrawState {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(state.big_pool_balance, Uint128::from(200_000_000u128));
+
+    // Build merkle tree
+    let addr_a = dist_deps.api.addr_make("user_a").to_string();
+    let leaf_a = compute_leaf_hash(&addr_a, 0, 100);
+    let root_hex = hex::encode(leaf_a);
+
+    // Set snapshot for epoch 7 (epochs_between_big = 7)
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 7,
+            merkle_root: root_hex.clone(),
+            total_weight: Uint128::from(100u128),
+            num_holders: 1,
+        },
+    )
+    .unwrap();
+
+    // Commit BIG draw
+    let secret = b"big_draw_secret";
+    let commit: [u8; 32] = Sha256::digest(secret).into();
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Big,
+            operator_commit: hex::encode(commit),
+            target_drand_round: TEST_ROUND,
+            epoch: 7,
+        },
+    )
+    .unwrap();
+
+    // Verify big pool drained and last_big_draw_epoch set
+    let state: chance_reward_distributor::state::DrawStateInfo = from_json(
+        chance_reward_distributor::contract::query(
+            dist_deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::DrawState {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(state.big_pool_balance, Uint128::zero());
+    assert_eq!(state.last_big_draw_epoch, Some(7));
+
+    // Reveal
+    let env = mock_env();
+    dist_deps.querier.bank.update_balance(
+        &env.contract.address,
+        vec![Coin::new(200_000_000u128, "inj")],
+    );
+
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let res = chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        env,
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::RevealDraw {
+            draw_id: 0,
+            operator_secret_hex: hex::encode(secret),
+            winner_address: addr_a.clone(),
+            winner_cumulative_start: Uint128::zero(),
+            winner_cumulative_end: Uint128::from(100u128),
+            merkle_proof: vec![],
+        },
+    );
+    assert!(res.is_ok(), "Big pool reveal should succeed");
+
+    // Verify draw was revealed correctly
+    let draw: chance_reward_distributor::state::Draw = from_json(
+        chance_reward_distributor::contract::query(
+            dist_deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::Draw { draw_id: 0 },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        draw.status,
+        chance_staking_common::types::DrawStatus::Revealed
+    );
+    assert_eq!(draw.draw_type, chance_staking_common::types::DrawType::Big);
+    assert_eq!(draw.reward_amount, Uint128::from(200_000_000u128));
+
+    eprintln!("test_big_pool_draw_cycle passed");
+}
+
+#[test]
+fn test_draw_too_soon_enforcement() {
+    // Verify DrawTooSoon error when committing draws before the required epoch gap.
+
+    let mut deps = mock_dependencies();
+    setup_distributor(&mut deps);
+
+    // Fund regular pool
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(50_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap();
+
+    // Set snapshot for epoch 1
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 1,
+            merkle_root: "a".repeat(64),
+            total_weight: Uint128::from(1000u128),
+            num_holders: 3,
+        },
+    )
+    .unwrap();
+
+    // Commit regular draw for epoch 1
+    let secret = b"secret1";
+    let commit: [u8; 32] = Sha256::digest(secret).into();
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Regular,
+            operator_commit: hex::encode(commit),
+            target_drand_round: 1000,
+            epoch: 1,
+        },
+    )
+    .unwrap();
+
+    // Fund pool again and try to commit another regular draw for epoch 1
+    // (same epoch, but epochs_between_regular = 1 means next draw at epoch 1+1=2)
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(50_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap();
+
+    // Trying to commit at epoch 1 again should fail (last_regular_draw_epoch = 1,
+    // need epoch >= 1 + 1 = 2)
+    // But we can't use epoch 1 since it's already committed. Need epoch 2 snapshot.
+    // Actually, the H-02 fix requires epoch == LATEST_SNAPSHOT_EPOCH.
+    // Since latest is 1 and we already drew at 1, we need a new snapshot at epoch 2.
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 2,
+            merkle_root: "b".repeat(64),
+            total_weight: Uint128::from(1000u128),
+            num_holders: 3,
+        },
+    )
+    .unwrap();
+
+    // Now try to commit regular draw at epoch 2 — should succeed since 2 >= 1 + 1
+    let secret2 = b"secret2";
+    let commit2: [u8; 32] = Sha256::digest(secret2).into();
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let res = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Regular,
+            operator_commit: hex::encode(commit2),
+            target_drand_round: 1000,
+            epoch: 2,
+        },
+    );
+    assert!(res.is_ok(), "Draw at epoch 2 should succeed (gap=1)");
+
+    // Now test big pool: epochs_between_big = 7
+    // Fund big pool
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(100_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundBigPool {},
+    )
+    .unwrap();
+
+    // Commit big draw at epoch 2 (first big draw, no last_big_draw_epoch)
+    let secret3 = b"bigsecret1";
+    let commit3: [u8; 32] = Sha256::digest(secret3).into();
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Big,
+            operator_commit: hex::encode(commit3),
+            target_drand_round: 1000,
+            epoch: 2,
+        },
+    )
+    .unwrap();
+
+    // Fund big pool again
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(100_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundBigPool {},
+    )
+    .unwrap();
+
+    // Try big draw at epoch 5 — should fail: 5 < 2 + 7 = 9
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 5,
+            merkle_root: "c".repeat(64),
+            total_weight: Uint128::from(1000u128),
+            num_holders: 3,
+        },
+    )
+    .unwrap();
+
+    let secret4 = b"bigsecret2";
+    let commit4: [u8; 32] = Sha256::digest(secret4).into();
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Big,
+            operator_commit: hex::encode(commit4),
+            target_drand_round: 1000,
+            epoch: 5,
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("DrawTooSoon"),
+        "Expected DrawTooSoon for big draw at epoch 5, got: {:?}",
+        err
+    );
+
+    eprintln!("test_draw_too_soon_enforcement passed");
+}
+
+#[test]
+fn test_invalid_merkle_proof_rejected() {
+    // Verify that reveal_draw rejects an invalid merkle proof.
+
+    let mut oracle_deps = mock_dependencies();
+    setup_oracle(&mut oracle_deps);
+
+    let operator = oracle_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_drand_oracle::contract::execute(
+        oracle_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::SubmitBeacon {
+            round: TEST_ROUND,
+            signature_hex: TEST_SIG_HEX.to_string(),
+        },
+    )
+    .unwrap();
+
+    let beacon_query_res = chance_drand_oracle::contract::query(
+        oracle_deps.as_ref(),
+        mock_env(),
+        chance_drand_oracle::msg::QueryMsg::Beacon { round: TEST_ROUND },
+    )
+    .unwrap();
+
+    let mut dist_deps = mock_dependencies();
+    let beacon_binary = beacon_query_res.clone();
+    dist_deps.querier.update_wasm(move |query| match query {
+        WasmQuery::Smart { msg, .. } => {
+            let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                from_json(msg);
+            match parsed {
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                    let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                        min_epochs_regular: 0,
+                        min_epochs_big: 0,
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
+                }
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo { address }) => {
+                    let info = chance_reward_distributor::msg::StakerInfoResponse {
+                        address,
+                        stake_epoch: Some(0),
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                }
+                _ => SystemResult::Ok(ContractResult::Ok(beacon_binary.clone())),
+            }
+        }
+        _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+            error: "Only smart queries supported".to_string(),
+            request: Default::default(),
+        }),
+    });
+
+    setup_distributor(&mut dist_deps);
+
+    // Fund pool
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(50_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap();
+
+    // Build merkle tree with 2 leaves
+    let addr_a = dist_deps.api.addr_make("user_a").to_string();
+    let addr_b = dist_deps.api.addr_make("user_b").to_string();
+    let leaf_a = compute_leaf_hash(&addr_a, 0, 500);
+    let leaf_b = compute_leaf_hash(&addr_b, 500, 1000);
+    let root = sorted_hash(&leaf_a, &leaf_b);
+    let root_hex = hex::encode(root);
+
+    // Set snapshot
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 1,
+            merkle_root: root_hex.clone(),
+            total_weight: Uint128::from(1000u128),
+            num_holders: 2,
+        },
+    )
+    .unwrap();
+
+    // Commit draw
+    let secret = b"proof_test_secret";
+    let commit: [u8; 32] = Sha256::digest(secret).into();
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Regular,
+            operator_commit: hex::encode(commit),
+            target_drand_round: TEST_ROUND,
+            epoch: 1,
+        },
+    )
+    .unwrap();
+
+    // Compute winning ticket
+    let drand_randomness = hex::decode(TEST_RANDOMNESS_HEX).unwrap();
+    let secret_hash: [u8; 32] = Sha256::digest(secret).into();
+    let mut final_rand = [0u8; 32];
+    for i in 0..32 {
+        final_rand[i] = drand_randomness[i] ^ secret_hash[i];
+    }
+    let mut ticket_bytes = [0u8; 16];
+    ticket_bytes.copy_from_slice(&final_rand[0..16]);
+    let ticket_raw = u128::from_be_bytes(ticket_bytes);
+    let winning_ticket = ticket_raw % 1000;
+
+    // Determine correct winner but provide WRONG proof
+    let (winner_addr, winner_start, winner_end) = if winning_ticket < 500 {
+        (addr_a.clone(), Uint128::zero(), Uint128::from(500u128))
+    } else {
+        (
+            addr_b.clone(),
+            Uint128::from(500u128),
+            Uint128::from(1000u128),
+        )
+    };
+
+    // Use a completely fake proof
+    let fake_proof = vec![hex::encode([0xdeu8; 32])];
+
+    let env = mock_env();
+    dist_deps.querier.bank.update_balance(
+        &env.contract.address,
+        vec![Coin::new(50_000_000u128, "inj")],
+    );
+
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        env,
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::RevealDraw {
+            draw_id: 0,
+            operator_secret_hex: hex::encode(secret),
+            winner_address: winner_addr,
+            winner_cumulative_start: winner_start,
+            winner_cumulative_end: winner_end,
+            merkle_proof: fake_proof,
+        },
+    )
+    .unwrap_err();
+
+    assert!(
+        format!("{:?}", err).contains("InvalidMerkleProof"),
+        "Expected InvalidMerkleProof, got: {:?}",
+        err
+    );
+
+    eprintln!("test_invalid_merkle_proof_rejected passed");
+}
+
+#[test]
+fn test_winning_ticket_out_of_range_rejected() {
+    // Verify that reveal rejects a winner whose cumulative range doesn't contain
+    // the winning ticket.
+
+    let mut oracle_deps = mock_dependencies();
+    setup_oracle(&mut oracle_deps);
+
+    let operator = oracle_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_drand_oracle::contract::execute(
+        oracle_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::SubmitBeacon {
+            round: TEST_ROUND,
+            signature_hex: TEST_SIG_HEX.to_string(),
+        },
+    )
+    .unwrap();
+
+    let beacon_query_res = chance_drand_oracle::contract::query(
+        oracle_deps.as_ref(),
+        mock_env(),
+        chance_drand_oracle::msg::QueryMsg::Beacon { round: TEST_ROUND },
+    )
+    .unwrap();
+
+    let mut dist_deps = mock_dependencies();
+    let beacon_binary = beacon_query_res.clone();
+    dist_deps.querier.update_wasm(move |query| match query {
+        WasmQuery::Smart { msg, .. } => {
+            let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                from_json(msg);
+            match parsed {
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                    let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                        min_epochs_regular: 0,
+                        min_epochs_big: 0,
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
+                }
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo { address }) => {
+                    let info = chance_reward_distributor::msg::StakerInfoResponse {
+                        address,
+                        stake_epoch: Some(0),
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                }
+                _ => SystemResult::Ok(ContractResult::Ok(beacon_binary.clone())),
+            }
+        }
+        _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+            error: "Only smart queries supported".to_string(),
+            request: Default::default(),
+        }),
+    });
+
+    setup_distributor(&mut dist_deps);
+
+    // Fund pool
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(50_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap();
+
+    // Single leaf tree — all tickets go to user_a [0, 1000)
+    let addr_a = dist_deps.api.addr_make("user_a").to_string();
+    let leaf_a = compute_leaf_hash(&addr_a, 0, 1000);
+    let root_hex = hex::encode(leaf_a);
+
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 1,
+            merkle_root: root_hex.clone(),
+            total_weight: Uint128::from(1000u128),
+            num_holders: 1,
+        },
+    )
+    .unwrap();
+
+    let secret = b"range_test_secret";
+    let commit: [u8; 32] = Sha256::digest(secret).into();
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Regular,
+            operator_commit: hex::encode(commit),
+            target_drand_round: TEST_ROUND,
+            epoch: 1,
+        },
+    )
+    .unwrap();
+
+    // Submit with WRONG cumulative range that doesn't contain the winning ticket
+    // Winner is [0, 1000) but we claim [0, 1) — unless ticket is 0, this will fail
+    let env = mock_env();
+    dist_deps.querier.bank.update_balance(
+        &env.contract.address,
+        vec![Coin::new(50_000_000u128, "inj")],
+    );
+
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        env,
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::RevealDraw {
+            draw_id: 0,
+            operator_secret_hex: hex::encode(secret),
+            winner_address: addr_a.clone(),
+            winner_cumulative_start: Uint128::from(999u128),
+            winner_cumulative_end: Uint128::from(1000u128),
+            merkle_proof: vec![],
+        },
+    );
+
+    // This should fail with either WinningTicketOutOfRange or InvalidMerkleProof
+    // depending on whether the ticket check or merkle check runs first.
+    // The ticket check runs first (step 5 before step 6).
+    // The winning ticket is unlikely to be in [999, 1000), so this should fail.
+    // But if by chance it lands on 999, the merkle proof will fail instead
+    // since the leaf hash uses [999, 1000) but the tree has [0, 1000).
+    assert!(err.is_err(), "Should reject wrong cumulative range");
+    let err_str = format!("{:?}", err.unwrap_err());
+    assert!(
+        err_str.contains("WinningTicketOutOfRange") || err_str.contains("InvalidMerkleProof"),
+        "Expected WinningTicketOutOfRange or InvalidMerkleProof, got: {}",
+        err_str
+    );
+
+    eprintln!("test_winning_ticket_out_of_range_rejected passed");
+}
+
+#[test]
+fn test_beacon_not_found_during_reveal() {
+    // Verify that reveal fails when the target drand round beacon hasn't been submitted.
+
+    let mut dist_deps = mock_dependencies();
+
+    // Configure mock querier to return None for beacon queries
+    dist_deps.querier.update_wasm(move |query| {
+        match query {
+            WasmQuery::Smart { msg, .. } => {
+                let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                    from_json(msg);
+                match parsed {
+                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                        let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                            min_epochs_regular: 0,
+                            min_epochs_big: 0,
+                        };
+                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
+                    }
+                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo {
+                        address,
+                    }) => {
+                        let info = chance_reward_distributor::msg::StakerInfoResponse {
+                            address,
+                            stake_epoch: Some(0),
+                        };
+                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                    }
+                    _ => {
+                        // Return None for beacon query (beacon not found)
+                        let none_beacon: Option<
+                            chance_reward_distributor::state::StoredBeaconResponse,
+                        > = None;
+                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&none_beacon).unwrap()))
+                    }
+                }
+            }
+            _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+                error: "Only smart queries supported".to_string(),
+                request: Default::default(),
+            }),
+        }
+    });
+
+    setup_distributor(&mut dist_deps);
+
+    // Fund pool
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(50_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap();
+
+    // Set snapshot
+    let addr_a = dist_deps.api.addr_make("user_a").to_string();
+    let leaf_a = compute_leaf_hash(&addr_a, 0, 100);
+    let root_hex = hex::encode(leaf_a);
+
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 1,
+            merkle_root: root_hex.clone(),
+            total_weight: Uint128::from(100u128),
+            num_holders: 1,
+        },
+    )
+    .unwrap();
+
+    // Commit draw targeting round 9999 (not submitted)
+    let secret = b"beacon_test";
+    let commit: [u8; 32] = Sha256::digest(secret).into();
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Regular,
+            operator_commit: hex::encode(commit),
+            target_drand_round: 9999,
+            epoch: 1,
+        },
+    )
+    .unwrap();
+
+    // Try to reveal — should fail with BeaconNotFound
+    let env = mock_env();
+    dist_deps.querier.bank.update_balance(
+        &env.contract.address,
+        vec![Coin::new(50_000_000u128, "inj")],
+    );
+
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        env,
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::RevealDraw {
+            draw_id: 0,
+            operator_secret_hex: hex::encode(secret),
+            winner_address: addr_a,
+            winner_cumulative_start: Uint128::zero(),
+            winner_cumulative_end: Uint128::from(100u128),
+            merkle_proof: vec![],
+        },
+    )
+    .unwrap_err();
+
+    assert!(
+        format!("{:?}", err).contains("BeaconNotFound"),
+        "Expected BeaconNotFound, got: {:?}",
+        err
+    );
+
+    eprintln!("test_beacon_not_found_during_reveal passed");
+}
+
+#[test]
+fn test_multiple_unstake_requests_per_user() {
+    // Verify that a user can create multiple unstake requests and claim them individually.
+
+    let mut deps = mock_dependencies();
+    setup_hub(&mut deps);
+
+    let config: chance_staking_hub::state::Config = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::Config {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    let user = deps.api.addr_make("user");
+
+    // Stake 300 INJ
+    let info = message_info(&user, &[Coin::new(300_000_000u128, "inj")]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap();
+
+    // Create 3 unstake requests: 50, 80, 120 csINJ
+    for amount in [50_000_000u128, 80_000_000u128, 120_000_000u128] {
+        let user = deps.api.addr_make("user");
+        let info = message_info(&user, &[Coin::new(amount, &config.csinj_denom)]);
+        chance_staking_hub::contract::execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            chance_staking_hub::msg::ExecuteMsg::Unstake {},
+        )
+        .unwrap();
+    }
+
+    // Verify 3 requests exist
+    let requests: Vec<chance_staking_hub::msg::UnstakeRequestEntry> = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::UnstakeRequests {
+                address: deps.api.addr_make("user").to_string(),
+                start_after: None,
+                limit: None,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[0].id, 0);
+    assert_eq!(requests[1].id, 1);
+    assert_eq!(requests[2].id, 2);
+
+    // Fast forward past 21 days
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(env.block.time.seconds() + 22 * 24 * 60 * 60);
+
+    // Claim just request 1
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &[]);
+    let res = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        env.clone(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::ClaimUnstaked {
+            request_ids: vec![1],
+        },
+    )
+    .unwrap();
+    assert_eq!(res.messages.len(), 1);
+
+    // Claim requests 0 and 2 in a batch
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &[]);
+    let res = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        env,
+        info,
+        chance_staking_hub::msg::ExecuteMsg::ClaimUnstaked {
+            request_ids: vec![0, 2],
+        },
+    )
+    .unwrap();
+    assert_eq!(res.messages.len(), 1); // single bank send for combined amount
+
+    // Verify all claimed
+    let requests: Vec<chance_staking_hub::msg::UnstakeRequestEntry> = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::UnstakeRequests {
+                address: deps.api.addr_make("user").to_string(),
+                start_after: None,
+                limit: None,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    for req in &requests {
+        assert!(req.request.claimed, "Request {} should be claimed", req.id);
+    }
+
+    // Verify backing is now 300M - 250M = 50M
+    let rate: chance_staking_hub::msg::ExchangeRateResponse = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::ExchangeRate {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(rate.total_inj_backing, Uint128::from(50_000_000u128));
+
+    eprintln!("test_multiple_unstake_requests_per_user passed");
+}
+
+#[test]
+fn test_zero_rewards_distribution() {
+    // Verify that distribute_rewards works correctly when there are zero surplus rewards
+    // (contract balance == pending unstake total).
+
+    let mut deps = mock_dependencies();
+    setup_hub(&mut deps);
+
+    let config: chance_staking_hub::state::Config = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::Config {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    let user = deps.api.addr_make("user");
+
+    // Stake 100 INJ
+    let info = message_info(&user, &[Coin::new(100_000_000u128, "inj")]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap();
+
+    // Unstake 50 csINJ to create pending unstake
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &[Coin::new(50_000_000u128, &config.csinj_denom)]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Unstake {},
+    )
+    .unwrap();
+
+    // Set contract balance = pending unstake total (50M), so surplus = 0
+    let mut env = mock_env();
+    env.block.time = env.block.time.plus_seconds(86400);
+    deps.querier.bank.update_balance(
+        &env.contract.address,
+        vec![Coin::new(50_000_000u128, "inj")],
+    );
+
+    // Distribute rewards — should succeed with 0 rewards
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let res = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        env,
+        info,
+        chance_staking_hub::msg::ExecuteMsg::DistributeRewards {},
+    )
+    .unwrap();
+
+    // Verify epoch advanced
+    let epoch_state: chance_staking_hub::state::EpochState = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::EpochState {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        epoch_state.current_epoch, 2,
+        "Epoch should advance even with zero rewards"
+    );
+
+    // Verify no pool funding messages (all zero amounts skipped)
+    // Messages would only be for non-zero amounts
+    let has_wasm_msgs = res
+        .messages
+        .iter()
+        .any(|m| matches!(m.msg, cosmwasm_std::CosmosMsg::Wasm(_)));
+    assert!(
+        !has_wasm_msgs,
+        "Should not send wasm messages for zero-amount pool funding"
+    );
+
+    // Exchange rate should remain the same (no base yield added)
+    let rate: chance_staking_hub::msg::ExchangeRateResponse = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::ExchangeRate {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        rate.rate,
+        Decimal::one(),
+        "Rate should stay at 1.0 with zero rewards"
+    );
+
+    eprintln!("test_zero_rewards_distribution passed");
+}
+
+#[test]
+fn test_exchange_rate_rounding_no_value_extraction() {
+    // Verify that staking and immediately unstaking at a non-1.0 rate
+    // doesn't allow a user to extract more INJ than they staked.
+
+    let mut deps = mock_dependencies();
+    setup_hub(&mut deps);
+
+    let config: chance_staking_hub::state::Config = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::Config {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    // User1 stakes 100M to establish initial pool
+    let user1 = deps.api.addr_make("user1");
+    let info = message_info(&user1, &[Coin::new(100_000_000u128, "inj")]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap();
+
+    // Simulate rewards: 10M rewards → base_yield = 5% = 500K
+    let mut env = mock_env();
+    env.block.time = env.block.time.plus_seconds(86400);
+    deps.querier.bank.update_balance(
+        &env.contract.address,
+        vec![Coin::new(10_000_000u128, "inj")],
+    );
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        env,
+        info,
+        chance_staking_hub::msg::ExecuteMsg::DistributeRewards {},
+    )
+    .unwrap();
+
+    // Rate should now be > 1.0
+    let rate: chance_staking_hub::msg::ExchangeRateResponse = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::ExchangeRate {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(rate.rate > Decimal::one());
+
+    // User2 stakes a small odd amount (7 INJ)
+    let user2 = deps.api.addr_make("user2");
+    let stake_amount = 7_000_000u128;
+    let info = message_info(&user2, &[Coin::new(stake_amount, "inj")]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap();
+
+    // Immediately unstake all csINJ
+    let rate_before: chance_staking_hub::msg::ExchangeRateResponse = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::ExchangeRate {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let user2_csinj = rate_before.total_csinj_supply - Uint128::from(100_000_000u128);
+
+    let user2 = deps.api.addr_make("user2");
+    let info = message_info(
+        &user2,
+        &[Coin::new(user2_csinj.u128(), &config.csinj_denom)],
+    );
+    let res = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Unstake {},
+    )
+    .unwrap();
+
+    // Check inj_owed from the unstake event
+    let unstake_event = res
+        .events
+        .iter()
+        .find(|e| e.ty == "chance_unstake")
+        .unwrap();
+    let inj_owed: u128 = unstake_event
+        .attributes
+        .iter()
+        .find(|a| a.key == "inj_owed")
+        .unwrap()
+        .value
+        .parse()
+        .unwrap();
+
+    // User should NOT get more INJ back than they put in
+    assert!(
+        inj_owed <= stake_amount,
+        "Rounding exploitation: staked {}, got back {} — extraction of {} wei",
+        stake_amount,
+        inj_owed,
+        inj_owed.saturating_sub(stake_amount)
+    );
+
+    eprintln!("test_exchange_rate_rounding_no_value_extraction passed");
+}
+
+#[test]
+fn test_concurrent_regular_and_big_draw() {
+    // Verify that both a regular and big draw can be committed and revealed
+    // in the same epoch.
+
+    let mut oracle_deps = mock_dependencies();
+    setup_oracle(&mut oracle_deps);
+
+    let operator = oracle_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_drand_oracle::contract::execute(
+        oracle_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::SubmitBeacon {
+            round: TEST_ROUND,
+            signature_hex: TEST_SIG_HEX.to_string(),
+        },
+    )
+    .unwrap();
+
+    let beacon_query_res = chance_drand_oracle::contract::query(
+        oracle_deps.as_ref(),
+        mock_env(),
+        chance_drand_oracle::msg::QueryMsg::Beacon { round: TEST_ROUND },
+    )
+    .unwrap();
+
+    let mut dist_deps = mock_dependencies();
+    let beacon_binary = beacon_query_res.clone();
+    dist_deps.querier.update_wasm(move |query| match query {
+        WasmQuery::Smart { msg, .. } => {
+            let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                from_json(msg);
+            match parsed {
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                    let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                        min_epochs_regular: 0,
+                        min_epochs_big: 0,
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
+                }
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo { address }) => {
+                    let info = chance_reward_distributor::msg::StakerInfoResponse {
+                        address,
+                        stake_epoch: Some(0),
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                }
+                _ => SystemResult::Ok(ContractResult::Ok(beacon_binary.clone())),
+            }
+        }
+        _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+            error: "Only smart queries supported".to_string(),
+            request: Default::default(),
+        }),
+    });
+
+    setup_distributor(&mut dist_deps);
+
+    // Fund both pools
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(30_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap();
+
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(100_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundBigPool {},
+    )
+    .unwrap();
+
+    // Set snapshot
+    let addr_a = dist_deps.api.addr_make("user_a").to_string();
+    let leaf_a = compute_leaf_hash(&addr_a, 0, 100);
+    let root_hex = hex::encode(leaf_a);
+
+    let staking_hub = dist_deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 1,
+            merkle_root: root_hex.clone(),
+            total_weight: Uint128::from(100u128),
+            num_holders: 1,
+        },
+    )
+    .unwrap();
+
+    // Commit regular draw (draw_id = 0)
+    let secret_regular = b"regular_secret";
+    let commit_r: [u8; 32] = Sha256::digest(secret_regular).into();
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Regular,
+            operator_commit: hex::encode(commit_r),
+            target_drand_round: TEST_ROUND,
+            epoch: 1,
+        },
+    )
+    .unwrap();
+
+    // Commit big draw (draw_id = 1)
+    let secret_big = b"big_secret";
+    let commit_b: [u8; 32] = Sha256::digest(secret_big).into();
+    let operator = dist_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        dist_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Big,
+            operator_commit: hex::encode(commit_b),
+            target_drand_round: TEST_ROUND,
+            epoch: 1,
+        },
+    )
+    .unwrap();
+
+    // Verify both pools drained
+    let state: chance_reward_distributor::state::DrawStateInfo = from_json(
+        chance_reward_distributor::contract::query(
+            dist_deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::DrawState {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(state.regular_pool_balance, Uint128::zero());
+    assert_eq!(state.big_pool_balance, Uint128::zero());
+    assert_eq!(state.next_draw_id, 2);
+
+    // Reveal both draws
+    for (draw_id, secret) in [
+        (0u64, secret_regular.as_slice()),
+        (1u64, secret_big.as_slice()),
+    ] {
+        let env = mock_env();
+        dist_deps.querier.bank.update_balance(
+            &env.contract.address,
+            vec![Coin::new(200_000_000u128, "inj")],
+        );
+
+        let operator = dist_deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
+        let res = chance_reward_distributor::contract::execute(
+            dist_deps.as_mut(),
+            env,
+            info,
+            chance_reward_distributor::msg::ExecuteMsg::RevealDraw {
+                draw_id,
+                operator_secret_hex: hex::encode(secret),
+                winner_address: addr_a.clone(),
+                winner_cumulative_start: Uint128::zero(),
+                winner_cumulative_end: Uint128::from(100u128),
+                merkle_proof: vec![],
+            },
+        );
+        assert!(
+            res.is_ok(),
+            "Draw {} reveal should succeed, got: {:?}",
+            draw_id,
+            res.unwrap_err()
+        );
+    }
+
+    // Verify both draws completed
+    let state: chance_reward_distributor::state::DrawStateInfo = from_json(
+        chance_reward_distributor::contract::query(
+            dist_deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::DrawState {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(state.total_draws_completed, 2);
+    assert_eq!(
+        state.total_rewards_distributed,
+        Uint128::from(130_000_000u128)
+    );
+
+    eprintln!("test_concurrent_regular_and_big_draw passed");
+}
+
+#[test]
+fn test_double_claim_unstake_rejected() {
+    // Verify that claiming an already-claimed unstake request fails.
+
+    let mut deps = mock_dependencies();
+    setup_hub(&mut deps);
+
+    let config: chance_staking_hub::state::Config = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::Config {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    let user = deps.api.addr_make("user");
+
+    // Stake 100 INJ
+    let info = message_info(&user, &[Coin::new(100_000_000u128, "inj")]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap();
+
+    // Unstake 50
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &[Coin::new(50_000_000u128, &config.csinj_denom)]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Unstake {},
+    )
+    .unwrap();
+
+    // Fast forward past unbonding
+    let mut env = mock_env();
+    env.block.time = Timestamp::from_seconds(env.block.time.seconds() + 22 * 24 * 60 * 60);
+
+    // Claim once — should succeed
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &[]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        env.clone(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::ClaimUnstaked {
+            request_ids: vec![0],
+        },
+    )
+    .unwrap();
+
+    // Claim same request again — should fail
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        env,
+        info,
+        chance_staking_hub::msg::ExecuteMsg::ClaimUnstaked {
+            request_ids: vec![0],
+        },
+    )
+    .unwrap_err();
+
+    assert!(
+        format!("{:?}", err).contains("UnstakeAlreadyClaimed"),
+        "Expected UnstakeAlreadyClaimed, got: {:?}",
+        err
+    );
+
+    eprintln!("test_double_claim_unstake_rejected passed");
+}
+
+// ─── Min Stake Amount Tests ─────────────────────────────────────────
+
+#[test]
+fn test_min_stake_amount_enforcement() {
+    use cosmwasm_std::coins;
+
+    let mut deps = mock_dependencies();
+
+    // Instantiate hub with min_stake_amount = 1_000_000
+    let admin = deps.api.addr_make("admin");
+    let mut msg = hub_instantiate_msg();
+    msg.min_stake_amount = Uint128::new(1_000_000);
+    let info = message_info(&admin, &[]);
+    chance_staking_hub::contract::instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+    // Stake below minimum — should fail
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &coins(999_999, "inj"));
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("StakeBelowMinimum"),
+        "Expected StakeBelowMinimum, got: {:?}",
+        err
+    );
+
+    // Stake exactly at minimum — should succeed
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &coins(1_000_000, "inj"));
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap();
+
+    // Stake above minimum — should succeed
+    let user2 = deps.api.addr_make("user2");
+    let info = message_info(&user2, &coins(10_000_000, "inj"));
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap();
+
+    eprintln!("test_min_stake_amount_enforcement passed");
+}
+
+#[test]
+fn test_min_stake_amount_update_via_config() {
+    use cosmwasm_std::coins;
+
+    let mut deps = mock_dependencies();
+    setup_hub(&mut deps);
+
+    // Initially min_stake_amount is 0, so any amount works
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &coins(1, "inj"));
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap();
+
+    // Admin updates min_stake_amount to 500_000
+    let admin = deps.api.addr_make("admin");
+    let info = message_info(&admin, &[]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::UpdateConfig {
+            admin: None,
+            operator: None,
+            protocol_fee_bps: None,
+            base_yield_bps: None,
+            regular_pool_bps: None,
+            big_pool_bps: None,
+            min_epochs_regular: None,
+            min_epochs_big: None,
+            min_stake_amount: Some(Uint128::new(500_000)),
+        },
+    )
+    .unwrap();
+
+    // Stake below new minimum should fail
+    let user2 = deps.api.addr_make("user2");
+    let info = message_info(&user2, &coins(499_999, "inj"));
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("StakeBelowMinimum"),
+        "Expected StakeBelowMinimum, got: {:?}",
+        err
+    );
+
+    // Stake at new minimum should succeed
+    let user2 = deps.api.addr_make("user2");
+    let info = message_info(&user2, &coins(500_000, "inj"));
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap();
+
+    eprintln!("test_min_stake_amount_update_via_config passed");
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Coverage expansion tests
+// ────────────────────────────────────────────────────────────────────────────
+
+/// Helper: get the beacon binary for mocking cross-contract oracle queries.
+fn get_test_beacon_binary() -> cosmwasm_std::Binary {
+    let mut oracle_deps = mock_dependencies();
+    setup_oracle(&mut oracle_deps);
+    let operator = oracle_deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_drand_oracle::contract::execute(
+        oracle_deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::SubmitBeacon {
+            round: TEST_ROUND,
+            signature_hex: TEST_SIG_HEX.to_string(),
+        },
+    )
+    .unwrap();
+    chance_drand_oracle::contract::query(
+        oracle_deps.as_ref(),
+        mock_env(),
+        chance_drand_oracle::msg::QueryMsg::Beacon { round: TEST_ROUND },
+    )
+    .unwrap()
+}
+
+/// Helper: setup distributor deps with mock wasm querier for cross-contract queries.
+fn setup_distributor_with_mocks(
+    deps: &mut OwnedDeps<cosmwasm_std::MemoryStorage, MockApi, MockQuerier>,
+    min_epochs_regular: u64,
+    min_epochs_big: u64,
+    stake_epoch: Option<u64>,
+) {
+    let beacon_binary = get_test_beacon_binary();
+    deps.querier.update_wasm(move |query| match query {
+        WasmQuery::Smart { msg, .. } => {
+            let parsed: Result<chance_reward_distributor::msg::OracleQueryMsg, _> = from_json(msg);
+            if let Ok(chance_reward_distributor::msg::OracleQueryMsg::Beacon { .. }) = parsed {
+                return SystemResult::Ok(ContractResult::Ok(beacon_binary.clone()));
+            }
+            let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                from_json(msg);
+            match parsed {
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                    let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                        min_epochs_regular,
+                        min_epochs_big,
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
+                }
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo { address }) => {
+                    let info = chance_reward_distributor::msg::StakerInfoResponse {
+                        address,
+                        stake_epoch,
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                }
+                _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+                    error: "Unknown query".to_string(),
+                    request: Default::default(),
+                }),
+            }
+        }
+        _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+            error: "Only smart queries supported".to_string(),
+            request: Default::default(),
+        }),
+    });
+    setup_distributor(deps);
+}
+
+/// Helper: commit a draw and reveal it, returning the draw_id.
+/// Assumes pool is already funded and snapshot is already set.
+fn commit_and_reveal_draw(
+    deps: &mut OwnedDeps<cosmwasm_std::MemoryStorage, MockApi, MockQuerier>,
+    epoch: u64,
+    draw_type: chance_staking_common::types::DrawType,
+    secret: &[u8],
+    _root_hex: &str,
+    total_weight: Uint128,
+    addr_a: &str,
+    leaf_a: &[u8; 32],
+    addr_b: &str,
+    leaf_b: &[u8; 32],
+    addr_c: &str,
+    leaf_c: &[u8; 32],
+    node_ab: &[u8; 32],
+    node_cd: &[u8; 32],
+) -> u64 {
+    let commit: [u8; 32] = Sha256::digest(secret).into();
+    let commit_hex = hex::encode(commit);
+
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let res = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type,
+            operator_commit: commit_hex,
+            target_drand_round: TEST_ROUND,
+            epoch,
+        },
+    )
+    .unwrap();
+
+    // Extract draw_id from response attributes
+    let draw_id: u64 = res
+        .attributes
+        .iter()
+        .find(|a| a.key == "draw_id")
+        .unwrap()
+        .value
+        .parse()
+        .unwrap();
+
+    // Compute winning ticket
+    let drand_randomness = hex::decode(TEST_RANDOMNESS_HEX).unwrap();
+    let secret_hash: [u8; 32] = Sha256::digest(secret).into();
+    let mut final_randomness = [0u8; 32];
+    for i in 0..32 {
+        final_randomness[i] = drand_randomness[i] ^ secret_hash[i];
+    }
+    let mut ticket_bytes = [0u8; 16];
+    ticket_bytes.copy_from_slice(&final_randomness[0..16]);
+    let ticket_raw = u128::from_be_bytes(ticket_bytes);
+    let winning_ticket = ticket_raw % total_weight.u128();
+
+    let (winner_addr, winner_start, winner_end, proof) = if winning_ticket < 100 {
+        (
+            addr_a.to_string(),
+            Uint128::zero(),
+            Uint128::from(100u128),
+            vec![hex::encode(leaf_b), hex::encode(node_cd)],
+        )
+    } else if winning_ticket < 350 {
+        (
+            addr_b.to_string(),
+            Uint128::from(100u128),
+            Uint128::from(350u128),
+            vec![hex::encode(leaf_a), hex::encode(node_cd)],
+        )
+    } else {
+        (
+            addr_c.to_string(),
+            Uint128::from(350u128),
+            Uint128::from(400u128),
+            vec![hex::encode(leaf_c), hex::encode(node_ab)],
+        )
+    };
+
+    // Set contract balance for reward payout
+    let env = mock_env();
+    deps.querier.bank.update_balance(
+        &env.contract.address,
+        vec![Coin::new(200_000_000u128, "inj")],
+    );
+
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        env,
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::RevealDraw {
+            draw_id,
+            operator_secret_hex: hex::encode(secret),
+            winner_address: winner_addr,
+            winner_cumulative_start: winner_start,
+            winner_cumulative_end: winner_end,
+            merkle_proof: proof,
+        },
+    )
+    .unwrap();
+
+    draw_id
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// P1: Execute handler error paths
+// ────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_staking_hub_stake_error_paths() {
+    let mut deps = mock_dependencies();
+    setup_hub(&mut deps);
+
+    let user = deps.api.addr_make("user");
+
+    // 1. NoFundsSent: empty funds
+    let info = message_info(&user, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("NoFundsSent"),
+        "Expected NoFundsSent, got: {:?}",
+        err
+    );
+
+    // 2. InvalidFunds: two different coins
+    let user = deps.api.addr_make("user");
+    let info = message_info(
+        &user,
+        &[
+            Coin::new(100_000_000u128, "inj"),
+            Coin::new(50_000_000u128, "uatom"),
+        ],
+    );
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("InvalidFunds"),
+        "Expected InvalidFunds, got: {:?}",
+        err
+    );
+
+    // 3. WrongDenom: send uatom instead of inj
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &[Coin::new(100_000_000u128, "uatom")]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("WrongDenom"),
+        "Expected WrongDenom, got: {:?}",
+        err
+    );
+
+    eprintln!("test_staking_hub_stake_error_paths passed");
+}
+
+#[test]
+fn test_staking_hub_unstake_error_paths() {
+    let mut deps = mock_dependencies();
+    setup_hub(&mut deps);
+
+    let config: chance_staking_hub::state::Config = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::Config {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    // Stake 100M INJ first
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &[Coin::new(100_000_000u128, "inj")]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap();
+
+    // 1. NoUnstakeFunds: empty funds
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Unstake {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("NoUnstakeFunds"),
+        "Expected NoUnstakeFunds, got: {:?}",
+        err
+    );
+
+    // 2. WrongUnstakeDenom: send INJ instead of csINJ
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &[Coin::new(50_000_000u128, "inj")]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Unstake {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("WrongUnstakeDenom"),
+        "Expected WrongUnstakeDenom, got: {:?}",
+        err
+    );
+
+    // 3. InsufficientBalance (H-04): manually reduce backing to trigger underflow
+    chance_staking_hub::state::TOTAL_INJ_BACKING
+        .save(deps.as_mut().storage, &Uint128::new(10))
+        .unwrap();
+
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &[Coin::new(50_000_000u128, &config.csinj_denom)]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Unstake {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("InsufficientBalance"),
+        "Expected InsufficientBalance, got: {:?}",
+        err
+    );
+
+    eprintln!("test_staking_hub_unstake_error_paths passed");
+}
+
+#[test]
+fn test_staking_hub_claim_unstaked_error_paths() {
+    let mut deps = mock_dependencies();
+    setup_hub(&mut deps);
+
+    let user = deps.api.addr_make("user");
+
+    // 1. UnstakeRequestNotFound: claim nonexistent request
+    let info = message_info(&user, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::ClaimUnstaked {
+            request_ids: vec![99],
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("UnstakeRequestNotFound"),
+        "Expected UnstakeRequestNotFound, got: {:?}",
+        err
+    );
+
+    eprintln!("test_staking_hub_claim_unstaked_error_paths passed");
+}
+
+#[test]
+fn test_staking_hub_operator_access_control() {
+    let mut deps = mock_dependencies();
+    setup_hub(&mut deps);
+
+    let random_user = deps.api.addr_make("random_user");
+
+    // 1. ClaimRewards as non-operator → Unauthorized
+    let info = message_info(&random_user, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::ClaimRewards {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("Unauthorized"),
+        "Expected Unauthorized for ClaimRewards, got: {:?}",
+        err
+    );
+
+    // 2. DistributeRewards as non-operator → Unauthorized
+    let random_user = deps.api.addr_make("random_user");
+    let info = message_info(&random_user, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::DistributeRewards {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("Unauthorized"),
+        "Expected Unauthorized for DistributeRewards, got: {:?}",
+        err
+    );
+
+    // 3. DistributeRewards before epoch ready → EpochNotReady
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::DistributeRewards {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("EpochNotReady"),
+        "Expected EpochNotReady, got: {:?}",
+        err
+    );
+
+    eprintln!("test_staking_hub_operator_access_control passed");
+}
+
+#[test]
+fn test_staking_hub_take_snapshot_invalid_merkle_root() {
+    let mut deps = mock_dependencies();
+    setup_hub(&mut deps);
+
+    let operator = deps.api.addr_make("operator");
+
+    // 1. Wrong length (too short)
+    let info = message_info(&operator, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::TakeSnapshot {
+            merkle_root: "abcd".to_string(),
+            total_weight: Uint128::from(1000u128),
+            num_holders: 10,
+            snapshot_uri: "https://example.com".to_string(),
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("InvalidMerkleRoot"),
+        "Expected InvalidMerkleRoot for short root, got: {:?}",
+        err
+    );
+
+    // 2. Invalid hex (correct length but bad chars)
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::TakeSnapshot {
+            merkle_root: "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+                .to_string(),
+            total_weight: Uint128::from(1000u128),
+            num_holders: 10,
+            snapshot_uri: "https://example.com".to_string(),
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("InvalidMerkleRoot"),
+        "Expected InvalidMerkleRoot for bad hex, got: {:?}",
+        err
+    );
+
+    // 3. Valid 64-char hex root → success
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::TakeSnapshot {
+            merkle_root: "a".repeat(64),
+            total_weight: Uint128::from(1000u128),
+            num_holders: 10,
+            snapshot_uri: "https://example.com".to_string(),
+        },
+    )
+    .unwrap();
+
+    eprintln!("test_staking_hub_take_snapshot_invalid_merkle_root passed");
+}
+
+#[test]
+fn test_staking_hub_update_config_and_validators() {
+    let mut deps = mock_dependencies();
+    setup_hub(&mut deps);
+
+    let admin = deps.api.addr_make("admin");
+    let new_operator = deps.api.addr_make("new_operator");
+
+    // 1. UpdateConfig: change only operator, verify only operator changed
+    let info = message_info(&admin, &[]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::UpdateConfig {
+            admin: None,
+            operator: Some(new_operator.to_string()),
+            protocol_fee_bps: None,
+            base_yield_bps: None,
+            regular_pool_bps: None,
+            big_pool_bps: None,
+            min_epochs_regular: None,
+            min_epochs_big: None,
+            min_stake_amount: None,
+        },
+    )
+    .unwrap();
+
+    let config: chance_staking_hub::state::Config = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::Config {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(config.operator, new_operator);
+    assert_eq!(config.admin, admin); // unchanged
+    assert_eq!(config.protocol_fee_bps, 500); // unchanged
+
+    // 2. InvalidBps: protocol_fee_bps > 10000
+    let admin = deps.api.addr_make("admin");
+    let info = message_info(&admin, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::UpdateConfig {
+            admin: None,
+            operator: None,
+            protocol_fee_bps: Some(10001),
+            base_yield_bps: None,
+            regular_pool_bps: None,
+            big_pool_bps: None,
+            min_epochs_regular: None,
+            min_epochs_big: None,
+            min_stake_amount: None,
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("InvalidBps"),
+        "Expected InvalidBps, got: {:?}",
+        err
+    );
+
+    // 3. UpdateConfig as non-admin → Unauthorized
+    let random = deps.api.addr_make("random");
+    let info = message_info(&random, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::UpdateConfig {
+            admin: None,
+            operator: None,
+            protocol_fee_bps: None,
+            base_yield_bps: None,
+            regular_pool_bps: None,
+            big_pool_bps: None,
+            min_epochs_regular: None,
+            min_epochs_big: None,
+            min_stake_amount: None,
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("Unauthorized"),
+        "Expected Unauthorized for UpdateConfig, got: {:?}",
+        err
+    );
+
+    // 4. UpdateValidators: add a new validator
+    let admin = deps.api.addr_make("admin");
+    let info = message_info(&admin, &[]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::UpdateValidators {
+            add: vec!["injvaloper1newvalidatoraddressforintegration".to_string()],
+            remove: vec![],
+        },
+    )
+    .unwrap();
+
+    let config: chance_staking_hub::state::Config = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::Config {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(config.validators.len(), 3);
+
+    // 5. UpdateValidators as non-admin → Unauthorized
+    let random = deps.api.addr_make("random");
+    let info = message_info(&random, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::UpdateValidators {
+            add: vec!["injvaloper1anothervalidatoraddresstest1234".to_string()],
+            remove: vec![],
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("Unauthorized"),
+        "Expected Unauthorized for UpdateValidators, got: {:?}",
+        err
+    );
+
+    // 6. InvalidValidatorAddress: address without injvaloper prefix
+    let admin = deps.api.addr_make("admin");
+    let info = message_info(&admin, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::UpdateValidators {
+            add: vec!["cosmos1invalidaddress".to_string()],
+            remove: vec![],
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("InvalidValidatorAddress"),
+        "Expected InvalidValidatorAddress, got: {:?}",
+        err
+    );
+
+    // 7. NoValidators: remove all validators
+    let admin = deps.api.addr_make("admin");
+    let info = message_info(&admin, &[]);
+    let err = chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::UpdateValidators {
+            add: vec![],
+            remove: vec![
+                "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+                "injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+                "injvaloper1newvalidatoraddressforintegration".to_string(),
+            ],
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("NoValidators"),
+        "Expected NoValidators, got: {:?}",
+        err
+    );
+
+    eprintln!("test_staking_hub_update_config_and_validators passed");
+}
+
+#[test]
+fn test_distributor_fund_pool_errors() {
+    let mut deps = mock_dependencies();
+    setup_distributor(&mut deps);
+
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let random = deps.api.addr_make("random");
+
+    // 1. FundRegularPool as non-staking_hub → Unauthorized
+    let info = message_info(&random, &[Coin::new(10_000_000u128, "inj")]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("Unauthorized"),
+        "Expected Unauthorized for FundRegularPool, got: {:?}",
+        err
+    );
+
+    // 2. FundRegularPool with no INJ funds → NoFundsSent
+    let info = message_info(&staking_hub, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("NoFundsSent"),
+        "Expected NoFundsSent for FundRegularPool, got: {:?}",
+        err
+    );
+
+    // 3. FundBigPool as non-staking_hub → Unauthorized
+    let random = deps.api.addr_make("random");
+    let info = message_info(&random, &[Coin::new(10_000_000u128, "inj")]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundBigPool {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("Unauthorized"),
+        "Expected Unauthorized for FundBigPool, got: {:?}",
+        err
+    );
+
+    // 4. FundBigPool with no INJ funds → NoFundsSent
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundBigPool {},
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("NoFundsSent"),
+        "Expected NoFundsSent for FundBigPool, got: {:?}",
+        err
+    );
+
+    eprintln!("test_distributor_fund_pool_errors passed");
+}
+
+#[test]
+fn test_distributor_set_snapshot_and_commit_errors() {
+    let mut deps = mock_dependencies();
+    setup_distributor(&mut deps);
+
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let operator = deps.api.addr_make("operator");
+    let random = deps.api.addr_make("random");
+
+    // 1. SetSnapshot as non-staking_hub → Unauthorized
+    let info = message_info(&random, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 1,
+            merkle_root: "a".repeat(64),
+            total_weight: Uint128::from(1000u128),
+            num_holders: 10,
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("Unauthorized"),
+        "Expected Unauthorized for SetSnapshot, got: {:?}",
+        err
+    );
+
+    // 2. CommitDraw without snapshot → NoSnapshot
+    // Fund pool first so it's not empty
+    let info = message_info(&staking_hub, &[Coin::new(10_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap();
+
+    let info = message_info(&operator, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Regular,
+            operator_commit: "a".repeat(64),
+            target_drand_round: TEST_ROUND,
+            epoch: 1,
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("NoSnapshot"),
+        "Expected NoSnapshot, got: {:?}",
+        err
+    );
+
+    // 3. Set snapshot, then CommitDraw with empty pool
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 1,
+            merkle_root: "a".repeat(64),
+            total_weight: Uint128::from(1000u128),
+            num_holders: 10,
+        },
+    )
+    .unwrap();
+
+    // Commit regular draw (pool has 10M) → drains pool
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Regular,
+            operator_commit: "b".repeat(64),
+            target_drand_round: TEST_ROUND,
+            epoch: 1,
+        },
+    )
+    .unwrap();
+
+    // Now try big pool commit with empty big pool → EmptyPool
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Big,
+            operator_commit: "c".repeat(64),
+            target_drand_round: TEST_ROUND,
+            epoch: 1,
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("EmptyPool"),
+        "Expected EmptyPool, got: {:?}",
+        err
+    );
+
+    eprintln!("test_distributor_set_snapshot_and_commit_errors passed");
+}
+
+#[test]
+fn test_distributor_reveal_draw_error_paths() {
+    // This test requires mock querier for cross-contract queries
+    let mut deps = mock_dependencies();
+    setup_distributor_with_mocks(&mut deps, 0, 0, Some(0));
+
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let operator = deps.api.addr_make("operator");
+
+    let secret = b"reveal_error_test_secret";
+    let commit: [u8; 32] = Sha256::digest(secret).into();
+    let commit_hex = hex::encode(commit);
+
+    // Fund pool and set snapshot
+    let info = message_info(&staking_hub, &[Coin::new(50_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap();
+
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 1,
+            merkle_root: "a".repeat(64),
+            total_weight: Uint128::from(1000u128),
+            num_holders: 10,
+        },
+    )
+    .unwrap();
+
+    // Commit draw 0
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Regular,
+            operator_commit: commit_hex.clone(),
+            target_drand_round: TEST_ROUND,
+            epoch: 1,
+        },
+    )
+    .unwrap();
+
+    // 1. DrawExpired: advance past deadline, try reveal
+    let mut env = mock_env();
+    env.block.time = env.block.time.plus_seconds(3601); // deadline is 3600
+    let operator = deps.api.addr_make("operator");
+    let winner = deps.api.addr_make("winner");
+    let info = message_info(&operator, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        env,
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::RevealDraw {
+            draw_id: 0,
+            operator_secret_hex: hex::encode(secret),
+            winner_address: winner.to_string(),
+            winner_cumulative_start: Uint128::zero(),
+            winner_cumulative_end: Uint128::from(1000u128),
+            merkle_proof: vec![],
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("DrawExpired"),
+        "Expected DrawExpired, got: {:?}",
+        err
+    );
+
+    // Expire the draw so we can test DrawNotCommitted
+    let mut env = mock_env();
+    env.block.time = env.block.time.plus_seconds(3601);
+    let anyone = deps.api.addr_make("anyone");
+    let info = message_info(&anyone, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        env,
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::ExpireDraw { draw_id: 0 },
+    )
+    .unwrap();
+
+    // 2. DrawNotCommitted: try reveal on expired draw
+    let operator = deps.api.addr_make("operator");
+    let winner = deps.api.addr_make("winner");
+    let info = message_info(&operator, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::RevealDraw {
+            draw_id: 0,
+            operator_secret_hex: hex::encode(secret),
+            winner_address: winner.to_string(),
+            winner_cumulative_start: Uint128::zero(),
+            winner_cumulative_end: Uint128::from(1000u128),
+            merkle_proof: vec![],
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("DrawNotCommitted"),
+        "Expected DrawNotCommitted, got: {:?}",
+        err
+    );
+
+    // 3. CommitMismatch: commit a new draw, then reveal with wrong secret
+    // Fund pool again (it was returned on expire)
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(50_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap();
+
+    // Need a new snapshot epoch to avoid DrawTooSoon (epochs_between_regular=1)
+    // Set snapshot for epoch 2
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 2,
+            merkle_root: "a".repeat(64),
+            total_weight: Uint128::from(1000u128),
+            num_holders: 10,
+        },
+    )
+    .unwrap();
+
+    let new_secret = b"new_commit_secret_for_draw2";
+    let new_commit: [u8; 32] = Sha256::digest(new_secret).into();
+    let new_commit_hex = hex::encode(new_commit);
+
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Regular,
+            operator_commit: new_commit_hex,
+            target_drand_round: TEST_ROUND,
+            epoch: 2,
+        },
+    )
+    .unwrap();
+
+    // Reveal with WRONG secret
+    let operator = deps.api.addr_make("operator");
+    let winner = deps.api.addr_make("winner");
+    let info = message_info(&operator, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::RevealDraw {
+            draw_id: 1,
+            operator_secret_hex: hex::encode(b"wrong_secret_completely"),
+            winner_address: winner.to_string(),
+            winner_cumulative_start: Uint128::zero(),
+            winner_cumulative_end: Uint128::from(1000u128),
+            merkle_proof: vec![],
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("CommitMismatch"),
+        "Expected CommitMismatch, got: {:?}",
+        err
+    );
+
+    // 4. InsufficientContractBalance (L-05): set contract balance to 0
+    // Build a real merkle tree so the proof passes
+    let addr_a = deps.api.addr_make("user_a").to_string();
+    let leaf_a = compute_leaf_hash(&addr_a, 0, 1000);
+    let root_hex = hex::encode(leaf_a);
+
+    // Expire draw 1 and fund new draw with proper merkle root
+    let mut env = mock_env();
+    env.block.time = env.block.time.plus_seconds(3601);
+    let anyone = deps.api.addr_make("anyone");
+    let info = message_info(&anyone, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        env,
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::ExpireDraw { draw_id: 1 },
+    )
+    .unwrap();
+
+    // Fund and set proper snapshot for epoch 3
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[Coin::new(50_000_000u128, "inj")]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+    )
+    .unwrap();
+
+    let staking_hub = deps.api.addr_make("staking_hub");
+    let info = message_info(&staking_hub, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+            epoch: 3,
+            merkle_root: root_hex.clone(),
+            total_weight: Uint128::from(1000u128),
+            num_holders: 1,
+        },
+    )
+    .unwrap();
+
+    let secret3 = b"secret_for_draw_3_balance_test";
+    let commit3: [u8; 32] = Sha256::digest(secret3).into();
+    let commit3_hex = hex::encode(commit3);
+
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+            draw_type: chance_staking_common::types::DrawType::Regular,
+            operator_commit: commit3_hex,
+            target_drand_round: TEST_ROUND,
+            epoch: 3,
+        },
+    )
+    .unwrap();
+
+    // Compute winning ticket for this secret
+    let drand_randomness = hex::decode(TEST_RANDOMNESS_HEX).unwrap();
+    let secret3_hash: [u8; 32] = Sha256::digest(secret3).into();
+    let mut final_rand = [0u8; 32];
+    for i in 0..32 {
+        final_rand[i] = drand_randomness[i] ^ secret3_hash[i];
+    }
+    let mut ticket_bytes = [0u8; 16];
+    ticket_bytes.copy_from_slice(&final_rand[0..16]);
+    let ticket_raw = u128::from_be_bytes(ticket_bytes);
+    let winning_ticket = ticket_raw % 1000;
+    assert!(
+        winning_ticket < 1000,
+        "winning ticket should be in [0, 1000)"
+    );
+
+    // Set contract balance to 0 (insufficient)
+    let env = mock_env();
+    deps.querier
+        .bank
+        .update_balance(&env.contract.address, vec![]);
+
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        env,
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::RevealDraw {
+            draw_id: 2,
+            operator_secret_hex: hex::encode(secret3),
+            winner_address: addr_a.clone(),
+            winner_cumulative_start: Uint128::zero(),
+            winner_cumulative_end: Uint128::from(1000u128),
+            merkle_proof: vec![],
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("InsufficientContractBalance"),
+        "Expected InsufficientContractBalance, got: {:?}",
+        err
+    );
+
+    eprintln!("test_distributor_reveal_draw_error_paths passed");
+}
+
+#[test]
+fn test_distributor_update_config_errors() {
+    let mut deps = mock_dependencies();
+    setup_distributor(&mut deps);
+
+    let admin = deps.api.addr_make("admin");
+    let random = deps.api.addr_make("random");
+
+    // 1. Unauthorized: non-admin calls UpdateConfig
+    let info = message_info(&random, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::UpdateConfig {
+            operator: None,
+            staking_hub: None,
+            reveal_deadline_seconds: None,
+            epochs_between_regular: None,
+            epochs_between_big: None,
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("Unauthorized"),
+        "Expected Unauthorized, got: {:?}",
+        err
+    );
+
+    // 2. InvalidRevealDeadline: too low (below 300)
+    let info = message_info(&admin, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::UpdateConfig {
+            operator: None,
+            staking_hub: None,
+            reveal_deadline_seconds: Some(100),
+            epochs_between_regular: None,
+            epochs_between_big: None,
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("InvalidRevealDeadline"),
+        "Expected InvalidRevealDeadline for too low, got: {:?}",
+        err
+    );
+
+    // 3. InvalidRevealDeadline: too high (above 86400)
+    let admin = deps.api.addr_make("admin");
+    let info = message_info(&admin, &[]);
+    let err = chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::UpdateConfig {
+            operator: None,
+            staking_hub: None,
+            reveal_deadline_seconds: Some(100_000),
+            epochs_between_regular: None,
+            epochs_between_big: None,
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("InvalidRevealDeadline"),
+        "Expected InvalidRevealDeadline for too high, got: {:?}",
+        err
+    );
+
+    // 4. Valid update: all fields
+    let admin = deps.api.addr_make("admin");
+    let new_operator = deps.api.addr_make("new_op");
+    let new_hub = deps.api.addr_make("new_hub");
+    let info = message_info(&admin, &[]);
+    chance_reward_distributor::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_reward_distributor::msg::ExecuteMsg::UpdateConfig {
+            operator: Some(new_operator.to_string()),
+            staking_hub: Some(new_hub.to_string()),
+            reveal_deadline_seconds: Some(7200),
+            epochs_between_regular: Some(2),
+            epochs_between_big: Some(14),
+        },
+    )
+    .unwrap();
+
+    // Verify config updated
+    let config: chance_reward_distributor::state::DistributorConfig = from_json(
+        chance_reward_distributor::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::Config {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(config.operator, new_operator);
+    assert_eq!(config.staking_hub, new_hub);
+    assert_eq!(config.reveal_deadline_seconds, 7200);
+    assert_eq!(config.epochs_between_regular, 2);
+    assert_eq!(config.epochs_between_big, 14);
+
+    eprintln!("test_distributor_update_config_errors passed");
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// P2: Query coverage
+// ────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_distributor_query_coverage() {
+    // Run 3 full draw cycles and test DrawHistory, UserWins, UserWinDetails, Snapshot queries
+    let mut deps = mock_dependencies();
+    setup_distributor_with_mocks(&mut deps, 0, 0, Some(0));
+
+    let staking_hub = deps.api.addr_make("staking_hub");
+
+    // Build merkle tree
+    let addr_a = deps.api.addr_make("user_a").to_string();
+    let addr_b = deps.api.addr_make("user_b").to_string();
+    let addr_c = deps.api.addr_make("user_c").to_string();
+
+    let leaf_a = compute_leaf_hash(&addr_a, 0, 100);
+    let leaf_b = compute_leaf_hash(&addr_b, 100, 350);
+    let leaf_c = compute_leaf_hash(&addr_c, 350, 400);
+    let leaf_d = leaf_c;
+
+    let node_ab = sorted_hash(&leaf_a, &leaf_b);
+    let node_cd = sorted_hash(&leaf_c, &leaf_d);
+    let root = sorted_hash(&node_ab, &node_cd);
+    let root_hex = hex::encode(root);
+
+    let total_weight = Uint128::from(400u128);
+
+    // Run 3 draw cycles
+    for epoch in 1..=3u64 {
+        // Fund pool
+        let info = message_info(&staking_hub, &[Coin::new(10_000_000u128, "inj")]);
+        chance_reward_distributor::contract::execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+        )
+        .unwrap();
+
+        // Set snapshot
+        let info = message_info(&staking_hub, &[]);
+        chance_reward_distributor::contract::execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+                epoch,
+                merkle_root: root_hex.clone(),
+                total_weight,
+                num_holders: 3,
+            },
+        )
+        .unwrap();
+
+        let secret = format!("query_test_secret_{}", epoch);
+        commit_and_reveal_draw(
+            &mut deps,
+            epoch,
+            chance_staking_common::types::DrawType::Regular,
+            secret.as_bytes(),
+            &root_hex,
+            total_weight,
+            &addr_a,
+            &leaf_a,
+            &addr_b,
+            &leaf_b,
+            &addr_c,
+            &leaf_c,
+            &node_ab,
+            &node_cd,
+        );
+    }
+
+    // 1. DrawHistory pagination: limit=2
+    let resp: chance_reward_distributor::msg::DrawHistoryResponse = from_json(
+        chance_reward_distributor::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::DrawHistory {
+                start_after: None,
+                limit: Some(2),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(resp.draws.len(), 2, "Should return 2 draws with limit=2");
+    assert_eq!(resp.draws[0].id, 0);
+    assert_eq!(resp.draws[1].id, 1);
+
+    // DrawHistory with start_after=1
+    let resp: chance_reward_distributor::msg::DrawHistoryResponse = from_json(
+        chance_reward_distributor::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::DrawHistory {
+                start_after: Some(1),
+                limit: Some(10),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        resp.draws.len(),
+        1,
+        "Should return 1 draw after start_after=1"
+    );
+    assert_eq!(resp.draws[0].id, 2);
+
+    // 2. Snapshot query: epoch exists
+    let snapshot: Option<chance_reward_distributor::state::Snapshot> = from_json(
+        chance_reward_distributor::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::Snapshot { epoch: 1 },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(snapshot.is_some());
+    let snapshot = snapshot.unwrap();
+    assert_eq!(snapshot.epoch, 1);
+    assert_eq!(snapshot.merkle_root, root_hex);
+    assert_eq!(snapshot.total_weight, total_weight);
+    assert_eq!(snapshot.num_holders, 3);
+
+    // Snapshot query: epoch doesn't exist
+    let snapshot: Option<chance_reward_distributor::state::Snapshot> = from_json(
+        chance_reward_distributor::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::Snapshot { epoch: 99 },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(snapshot.is_none());
+
+    // 3. UserWins: get the winner from draw 0 to query their wins
+    let draw0: chance_reward_distributor::state::Draw = from_json(
+        chance_reward_distributor::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::Draw { draw_id: 0 },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let winner0 = draw0.winner.unwrap().to_string();
+
+    // Count how many draws this winner won
+    let user_wins: chance_reward_distributor::msg::UserWinsResponse = from_json(
+        chance_reward_distributor::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::UserWins {
+                address: winner0.clone(),
+                start_after: None,
+                limit: None,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        user_wins.total_wins >= 1,
+        "Winner should have at least 1 win"
+    );
+    assert_eq!(user_wins.draw_ids.len(), user_wins.total_wins as usize);
+    assert!(
+        !user_wins.total_won_amount.is_zero(),
+        "Total won amount should be > 0"
+    );
+
+    // 4. UserWinDetails: verify full Draw objects returned
+    let win_details: Vec<chance_reward_distributor::state::Draw> = from_json(
+        chance_reward_distributor::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::UserWinDetails {
+                address: winner0,
+                start_after: None,
+                limit: Some(10),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(win_details.len(), user_wins.total_wins as usize);
+    for draw in &win_details {
+        assert_eq!(
+            draw.status,
+            chance_staking_common::types::DrawStatus::Revealed
+        );
+        assert!(draw.winner.is_some());
+    }
+
+    // Verify draw state totals
+    let state: chance_reward_distributor::state::DrawStateInfo = from_json(
+        chance_reward_distributor::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_reward_distributor::msg::QueryMsg::DrawState {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(state.total_draws_completed, 3);
+    assert_eq!(
+        state.total_rewards_distributed,
+        Uint128::from(30_000_000u128)
+    );
+
+    eprintln!("test_distributor_query_coverage passed");
+}
+
+#[test]
+fn test_staking_hub_staker_info_and_unstake_pagination() {
+    let mut deps = mock_dependencies();
+    setup_hub(&mut deps);
+
+    let config: chance_staking_hub::state::Config = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::Config {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+
+    // 1. StakerInfo for non-staker → stake_epoch None
+    let non_staker = deps.api.addr_make("non_staker");
+    let staker_info: chance_staking_hub::msg::StakerInfoResponse = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::StakerInfo {
+                address: non_staker.to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        staker_info.stake_epoch.is_none(),
+        "Non-staker should have no stake_epoch"
+    );
+
+    // 2. Stake and verify StakerInfo
+    let user = deps.api.addr_make("user");
+    let info = message_info(&user, &[Coin::new(100_000_000u128, "inj")]);
+    chance_staking_hub::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_staking_hub::msg::ExecuteMsg::Stake {},
+    )
+    .unwrap();
+
+    let staker_info: chance_staking_hub::msg::StakerInfoResponse = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::StakerInfo {
+                address: user.to_string(),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(staker_info.stake_epoch, Some(1), "Stake epoch should be 1");
+
+    // 3. Create 5 unstake requests for pagination testing
+    for _ in 0..5 {
+        let user = deps.api.addr_make("user");
+        let info = message_info(&user, &[Coin::new(10_000_000u128, &config.csinj_denom)]);
+        chance_staking_hub::contract::execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            chance_staking_hub::msg::ExecuteMsg::Unstake {},
+        )
+        .unwrap();
+    }
+
+    // 4. Pagination: get first 2
+    let requests: Vec<chance_staking_hub::msg::UnstakeRequestEntry> = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::UnstakeRequests {
+                address: deps.api.addr_make("user").to_string(),
+                start_after: None,
+                limit: Some(2),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(requests.len(), 2, "Should return 2 with limit=2");
+    assert_eq!(requests[0].id, 0);
+    assert_eq!(requests[1].id, 1);
+
+    // Pagination: start_after=1, get next 2
+    let requests: Vec<chance_staking_hub::msg::UnstakeRequestEntry> = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::UnstakeRequests {
+                address: deps.api.addr_make("user").to_string(),
+                start_after: Some(1),
+                limit: Some(2),
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(requests.len(), 2, "Should return 2 after start_after=1");
+    assert_eq!(requests[0].id, 2);
+    assert_eq!(requests[1].id, 3);
+
+    // Pagination: start_after=3, get remaining
+    let requests: Vec<chance_staking_hub::msg::UnstakeRequestEntry> = from_json(
+        chance_staking_hub::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_staking_hub::msg::QueryMsg::UnstakeRequests {
+                address: deps.api.addr_make("user").to_string(),
+                start_after: Some(3),
+                limit: None,
+            },
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(requests.len(), 1, "Should return 1 after start_after=3");
+    assert_eq!(requests[0].id, 4);
+
+    eprintln!("test_staking_hub_staker_info_and_unstake_pagination passed");
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// P3: Audit edge cases
+// ────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_audit_edge_cases() {
+    // --- Big pool expiry returns funds to big pool (not regular) ---
+    {
+        let mut deps = mock_dependencies();
+        setup_distributor(&mut deps);
+
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let operator = deps.api.addr_make("operator");
+
+        // Fund big pool with 100M
+        let info = message_info(&staking_hub, &[Coin::new(100_000_000u128, "inj")]);
+        chance_reward_distributor::contract::execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            chance_reward_distributor::msg::ExecuteMsg::FundBigPool {},
+        )
+        .unwrap();
+
+        // Verify big pool balance
+        let balances: chance_reward_distributor::msg::PoolBalancesResponse = from_json(
+            chance_reward_distributor::contract::query(
+                deps.as_ref(),
+                mock_env(),
+                chance_reward_distributor::msg::QueryMsg::PoolBalances {},
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(balances.big_pool, Uint128::from(100_000_000u128));
+        assert_eq!(balances.regular_pool, Uint128::zero());
+
+        // Set snapshot for epoch 1
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &[]);
+        chance_reward_distributor::contract::execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+                epoch: 1,
+                merkle_root: "a".repeat(64),
+                total_weight: Uint128::from(1000u128),
+                num_holders: 10,
+            },
+        )
+        .unwrap();
+
+        // Commit big draw
+        let info = message_info(&operator, &[]);
+        chance_reward_distributor::contract::execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+                draw_type: chance_staking_common::types::DrawType::Big,
+                operator_commit: "a".repeat(64),
+                target_drand_round: TEST_ROUND,
+                epoch: 1,
+            },
+        )
+        .unwrap();
+
+        // Big pool should be drained after commit
+        let balances: chance_reward_distributor::msg::PoolBalancesResponse = from_json(
+            chance_reward_distributor::contract::query(
+                deps.as_ref(),
+                mock_env(),
+                chance_reward_distributor::msg::QueryMsg::PoolBalances {},
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(balances.big_pool, Uint128::zero());
+
+        // Expire the draw
+        let mut env = mock_env();
+        env.block.time = env.block.time.plus_seconds(3601);
+        let anyone = deps.api.addr_make("anyone");
+        let info = message_info(&anyone, &[]);
+        chance_reward_distributor::contract::execute(
+            deps.as_mut(),
+            env,
+            info,
+            chance_reward_distributor::msg::ExecuteMsg::ExpireDraw { draw_id: 0 },
+        )
+        .unwrap();
+
+        // Funds should return to BIG pool, not regular
+        let balances: chance_reward_distributor::msg::PoolBalancesResponse = from_json(
+            chance_reward_distributor::contract::query(
+                deps.as_ref(),
+                mock_env(),
+                chance_reward_distributor::msg::QueryMsg::PoolBalances {},
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            balances.big_pool,
+            Uint128::from(100_000_000u128),
+            "Expired big draw funds should return to big pool"
+        );
+        assert_eq!(
+            balances.regular_pool,
+            Uint128::zero(),
+            "Regular pool should remain empty"
+        );
+    }
+
+    // --- Re-staking resets eligibility (V2-I-01) ---
+    {
+        let mut deps = mock_dependencies();
+        setup_hub(&mut deps);
+
+        let user = deps.api.addr_make("user");
+
+        // Stake at epoch 1
+        let info = message_info(&user, &[Coin::new(100_000_000u128, "inj")]);
+        chance_staking_hub::contract::execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            chance_staking_hub::msg::ExecuteMsg::Stake {},
+        )
+        .unwrap();
+
+        let staker_info: chance_staking_hub::msg::StakerInfoResponse = from_json(
+            chance_staking_hub::contract::query(
+                deps.as_ref(),
+                mock_env(),
+                chance_staking_hub::msg::QueryMsg::StakerInfo {
+                    address: user.to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(staker_info.stake_epoch, Some(1));
+
+        // Advance to epoch 5 by manipulating state
+        let mut epoch_state: chance_staking_hub::state::EpochState = from_json(
+            chance_staking_hub::contract::query(
+                deps.as_ref(),
+                mock_env(),
+                chance_staking_hub::msg::QueryMsg::EpochState {},
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        epoch_state.current_epoch = 5;
+        chance_staking_hub::state::EPOCH_STATE
+            .save(deps.as_mut().storage, &epoch_state)
+            .unwrap();
+
+        // Re-stake → epoch resets to 5
+        let user = deps.api.addr_make("user");
+        let info = message_info(&user, &[Coin::new(1_000_000u128, "inj")]);
+        chance_staking_hub::contract::execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            chance_staking_hub::msg::ExecuteMsg::Stake {},
+        )
+        .unwrap();
+
+        let staker_info: chance_staking_hub::msg::StakerInfoResponse = from_json(
+            chance_staking_hub::contract::query(
+                deps.as_ref(),
+                mock_env(),
+                chance_staking_hub::msg::QueryMsg::StakerInfo {
+                    address: deps.api.addr_make("user").to_string(),
+                },
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            staker_info.stake_epoch,
+            Some(5),
+            "Re-staking should reset stake_epoch to current epoch"
+        );
+    }
+
+    // --- CommitDraw on non-latest epoch (H-02) ---
+    {
+        let mut deps = mock_dependencies();
+        setup_distributor(&mut deps);
+
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let operator = deps.api.addr_make("operator");
+
+        // Fund pool
+        let info = message_info(&staking_hub, &[Coin::new(10_000_000u128, "inj")]);
+        chance_reward_distributor::contract::execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            chance_reward_distributor::msg::ExecuteMsg::FundRegularPool {},
+        )
+        .unwrap();
+
+        // Set snapshot for epoch 1
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &[]);
+        chance_reward_distributor::contract::execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+                epoch: 1,
+                merkle_root: "a".repeat(64),
+                total_weight: Uint128::from(1000u128),
+                num_holders: 10,
+            },
+        )
+        .unwrap();
+
+        // Set snapshot for epoch 3 (becomes latest)
+        let staking_hub = deps.api.addr_make("staking_hub");
+        let info = message_info(&staking_hub, &[]);
+        chance_reward_distributor::contract::execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            chance_reward_distributor::msg::ExecuteMsg::SetSnapshot {
+                epoch: 3,
+                merkle_root: "b".repeat(64),
+                total_weight: Uint128::from(2000u128),
+                num_holders: 20,
+            },
+        )
+        .unwrap();
+
+        // Try CommitDraw for epoch 1 (not latest) → InvalidEpoch
+        let info = message_info(&operator, &[]);
+        let err = chance_reward_distributor::contract::execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            chance_reward_distributor::msg::ExecuteMsg::CommitDraw {
+                draw_type: chance_staking_common::types::DrawType::Regular,
+                operator_commit: "a".repeat(64),
+                target_drand_round: TEST_ROUND,
+                epoch: 1,
+            },
+        )
+        .unwrap_err();
+        assert!(
+            format!("{:?}", err).contains("InvalidEpoch"),
+            "Expected InvalidEpoch, got: {:?}",
+            err
+        );
+    }
+
+    eprintln!("test_audit_edge_cases passed");
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// P4: Oracle integration coverage
+// ────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_oracle_integration_coverage() {
+    let mut deps = mock_dependencies();
+    setup_oracle(&mut deps);
+
+    let admin = deps.api.addr_make("admin");
+    let operator = deps.api.addr_make("operator");
+
+    // 1. Config query: verify all fields match instantiation
+    let config: chance_drand_oracle::state::OracleConfig = from_json(
+        chance_drand_oracle::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_drand_oracle::msg::QueryMsg::Config {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(config.admin, admin);
+    assert_eq!(config.operators.len(), 1);
+    assert_eq!(config.operators[0], operator);
+    assert_eq!(config.quicknet_pubkey.len(), 96);
+    assert_eq!(config.period_seconds, 3);
+    assert_eq!(config.genesis_time, 1692803367);
+
+    // 2. UpdateOperators: add operator2
+    let operator2 = deps.api.addr_make("operator2");
+    let admin = deps.api.addr_make("admin");
+    let info = message_info(&admin, &[]);
+    chance_drand_oracle::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::UpdateOperators {
+            add: vec![operator2.to_string()],
+            remove: vec![],
+        },
+    )
+    .unwrap();
+
+    // Verify operator2 is in config
+    let config: chance_drand_oracle::state::OracleConfig = from_json(
+        chance_drand_oracle::contract::query(
+            deps.as_ref(),
+            mock_env(),
+            chance_drand_oracle::msg::QueryMsg::Config {},
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(config.operators.len(), 2);
+    assert!(config.operators.contains(&operator2));
+
+    // Remove original operator
+    let admin = deps.api.addr_make("admin");
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&admin, &[]);
+    chance_drand_oracle::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::UpdateOperators {
+            add: vec![],
+            remove: vec![operator.to_string()],
+        },
+    )
+    .unwrap();
+
+    // Verify original operator can no longer submit
+    let operator = deps.api.addr_make("operator");
+    let info = message_info(&operator, &[]);
+    let err = chance_drand_oracle::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::SubmitBeacon {
+            round: TEST_ROUND,
+            signature_hex: TEST_SIG_HEX.to_string(),
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("Unauthorized"),
+        "Removed operator should be unauthorized, got: {:?}",
+        err
+    );
+
+    // Verify operator2 CAN submit
+    let operator2 = deps.api.addr_make("operator2");
+    let info = message_info(&operator2, &[]);
+    chance_drand_oracle::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::SubmitBeacon {
+            round: TEST_ROUND,
+            signature_hex: TEST_SIG_HEX.to_string(),
+        },
+    )
+    .unwrap();
+
+    // UpdateOperators as non-admin → Unauthorized
+    let random = deps.api.addr_make("random");
+    let info = message_info(&random, &[]);
+    let err = chance_drand_oracle::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::UpdateOperators {
+            add: vec![],
+            remove: vec![],
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("Unauthorized"),
+        "Non-admin should be unauthorized for UpdateOperators, got: {:?}",
+        err
+    );
+
+    // 3. UpdateAdmin: rotate admin
+    let admin = deps.api.addr_make("admin");
+    let new_admin = deps.api.addr_make("new_admin");
+    let info = message_info(&admin, &[]);
+    chance_drand_oracle::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::UpdateAdmin {
+            new_admin: new_admin.to_string(),
+        },
+    )
+    .unwrap();
+
+    // Old admin locked out
+    let old_admin = deps.api.addr_make("admin");
+    let info = message_info(&old_admin, &[]);
+    let err = chance_drand_oracle::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::UpdateOperators {
+            add: vec![],
+            remove: vec![],
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("Unauthorized"),
+        "Old admin should be unauthorized, got: {:?}",
+        err
+    );
+
+    // New admin works
+    let info = message_info(&new_admin, &[]);
+    chance_drand_oracle::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::UpdateOperators {
+            add: vec![],
+            remove: vec![],
+        },
+    )
+    .unwrap();
+
+    // 4. Invalid hex: submit beacon with bad hex
+    let operator2 = deps.api.addr_make("operator2");
+    let info = message_info(&operator2, &[]);
+    let err = chance_drand_oracle::contract::execute(
+        deps.as_mut(),
+        mock_env(),
+        info,
+        chance_drand_oracle::msg::ExecuteMsg::SubmitBeacon {
+            round: 2000,
+            signature_hex: "not_valid_hex_zzzzzz".to_string(),
+        },
+    )
+    .unwrap_err();
+    assert!(
+        format!("{:?}", err).contains("InvalidHex"),
+        "Expected InvalidHex, got: {:?}",
+        err
+    );
+
+    eprintln!("test_oracle_integration_coverage passed");
 }

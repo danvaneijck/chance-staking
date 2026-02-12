@@ -16,6 +16,13 @@ interface StakingHubConfig {
     base_yield_bps: number;
     regular_pool_bps: number;
     big_pool_bps: number;
+    min_epochs_regular: number;
+    min_epochs_big: number;
+}
+
+interface StakerInfoResponse {
+    address: string;
+    stake_epoch: number | null;
 }
 
 interface DenomHolder {
@@ -32,6 +39,52 @@ export async function getStakingHubConfig(): Promise<StakingHubConfig> {
 export async function getCsInjDenom(): Promise<string> {
     const hubConfig = await getStakingHubConfig();
     return hubConfig.csinj_denom;
+}
+
+export async function queryStakerInfo(address: string): Promise<StakerInfoResponse> {
+    return queryContract<StakerInfoResponse>(config.contracts.stakingHub, {
+        staker_info: { address },
+    });
+}
+
+/**
+ * Filter holders by draw eligibility based on min_epochs config.
+ * Returns holders eligible for regular draws, and a flag indicating
+ * whether all of those holders are also eligible for big draws.
+ */
+export async function filterEligibleHolders(
+    holders: DenomHolder[],
+    currentEpoch: number,
+    minEpochsRegular: number,
+    minEpochsBig: number,
+): Promise<{ eligible: DenomHolder[]; allBigEligible: boolean }> {
+    const eligible: DenomHolder[] = [];
+    let allBigEligible = true;
+
+    for (const holder of holders) {
+        const info = await queryStakerInfo(holder.address);
+        if (info.stake_epoch === null) {
+            // No stake epoch recorded — skip (shouldn't happen for a holder)
+            logger.warn(`Holder ${holder.address} has no stake_epoch, excluding from snapshot`);
+            continue;
+        }
+
+        const epochsStaked = currentEpoch - info.stake_epoch;
+        if (epochsStaked < minEpochsRegular) {
+            logger.info(
+                `Excluding ${holder.address} from snapshot: staked ${epochsStaked} epochs, need ${minEpochsRegular} for regular`
+            );
+            continue;
+        }
+
+        eligible.push(holder);
+
+        if (epochsStaked < minEpochsBig) {
+            allBigEligible = false;
+        }
+    }
+
+    return { eligible, allBigEligible };
 }
 
 export async function fetchAllCsInjHolders(): Promise<DenomHolder[]> {

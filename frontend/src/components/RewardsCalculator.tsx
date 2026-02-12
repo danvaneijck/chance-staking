@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Calculator, TrendingUp, Trophy, Sparkles, Landmark } from 'lucide-react'
+import { Calculator, TrendingUp, Trophy, Sparkles, Landmark, Dices, Shield, Target, Zap } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { formatNumber } from '../utils/formatNumber'
 
@@ -9,6 +9,11 @@ export default function RewardsCalculator() {
   const bigPoolBps = useStore((s) => s.bigPoolBps)
   const protocolFeeBps = useStore((s) => s.protocolFeeBps)
   const onChainApr = useStore((s) => s.stakingApr)
+  const totalInjBacking = useStore((s) => s.totalInjBacking)
+  const epochDurationSeconds = useStore((s) => s.epochDurationSeconds)
+  const minEpochsRegular = useStore((s) => s.minEpochsRegular)
+  const minEpochsBig = useStore((s) => s.minEpochsBig)
+  const snapshotNumHolders = useStore((s) => s.snapshotNumHolders)
 
   const [stakeAmount, setStakeAmount] = useState('1000')
   const [apr, setApr] = useState('15')
@@ -32,6 +37,94 @@ export default function RewardsCalculator() {
   const bigPool = totalBps > 0 ? annualRewards * (bigPoolBps / totalBps) : 0
   const protocolFee = totalBps > 0 ? annualRewards * (protocolFeeBps / totalBps) : 0
   const effectiveBaseApr = stake > 0 ? (baseYield / stake) * 100 : 0
+
+  // ── Prize draw probability calculations ──
+  const totalInjBackingHuman = parseFloat(totalInjBacking) / 1e18
+
+  const epochsPerYear = epochDurationSeconds > 0 ? (365 * 86400) / epochDurationSeconds : 365
+  const regularDrawsPerYear = epochsPerYear / Math.max(minEpochsRegular, 1)
+  const bigDrawsPerYear = epochsPerYear / Math.max(minEpochsBig, 1)
+
+  // Include user's hypothetical stake in the pool for realistic prize sizes
+  const poolWithUser = totalInjBackingHuman + stake
+  const totalSysRewards = poolWithUser * (aprPct / 100)
+  const regPoolAnnual = totalBps > 0 ? totalSysRewards * (regularPoolBps / totalBps) : 0
+  const bigPoolAnnual = totalBps > 0 ? totalSysRewards * (bigPoolBps / totalBps) : 0
+  const regPrizePerDraw = regularDrawsPerYear > 0 ? regPoolAnnual / regularDrawsPerYear : 0
+  const bigPrizePerDraw = bigDrawsPerYear > 0 ? bigPoolAnnual / bigDrawsPerYear : 0
+
+  // Win probability per draw: user's share of total pool
+  const winProbPerDraw = poolWithUser > 0 && stake > 0 ? stake / poolWithUser : 0
+
+  // Annual prize distribution using normal approximation of binomial
+  // Each draw is a Bernoulli trial: win with prob p, prize = prizePerDraw
+  const expectedRegTotal = regularDrawsPerYear * winProbPerDraw * regPrizePerDraw
+  const expectedBigTotal = bigDrawsPerYear * winProbPerDraw * bigPrizePerDraw
+  const expectedTotalPrize = expectedRegTotal + expectedBigTotal
+
+  // Variance of total annual prize winnings
+  const regVar = regularDrawsPerYear * winProbPerDraw * (1 - winProbPerDraw) * regPrizePerDraw ** 2
+  const bigVar = bigDrawsPerYear * winProbPerDraw * (1 - winProbPerDraw) * bigPrizePerDraw ** 2
+  const totalPrizeStdDev = Math.sqrt(regVar + bigVar)
+
+  // Scenario payouts (annual)
+  const expectedPayout = baseYield + expectedTotalPrize
+  const luckyPayout = baseYield + expectedTotalPrize + 1.28 * totalPrizeStdDev
+  const jackpotPayout = baseYield + expectedTotalPrize + 2.33 * totalPrizeStdDev
+
+  // Scenario APRs
+  const expectedApr = stake > 0 ? (expectedPayout / stake) * 100 : 0
+  const luckyApr = stake > 0 ? (luckyPayout / stake) * 100 : 0
+  const jackpotApr = stake > 0 ? (jackpotPayout / stake) * 100 : 0
+
+  // Show variance scenarios only when there's meaningful spread
+  const hasVariance = totalPrizeStdDev > 0.05 * Math.max(expectedTotalPrize, 0.01)
+
+  const formatPct = (p: number): string => {
+    const pct = p * 100
+    if (pct >= 10) return `${pct.toFixed(0)}%`
+    if (pct >= 1) return `${pct.toFixed(1)}%`
+    if (pct >= 0.1) return `${pct.toFixed(2)}%`
+    if (pct >= 0.01) return `${pct.toFixed(3)}%`
+    return '<0.01%'
+  }
+
+  const oddsScenarios = [
+    {
+      label: 'Guaranteed Floor',
+      desc: 'Base yield only — no wins needed',
+      apr: effectiveBaseApr,
+      payout: baseYield,
+      color: '#22c55e',
+      icon: <Shield size={14} color="#22c55e" />,
+    },
+    {
+      label: 'Typical Year',
+      desc: 'Expected mathematical average',
+      apr: expectedApr,
+      payout: expectedPayout,
+      color: '#60a5fa',
+      icon: <Target size={14} color="#60a5fa" />,
+    },
+    ...(hasVariance ? [
+      {
+        label: 'Lucky Year',
+        desc: 'Top 10% of outcomes',
+        apr: luckyApr,
+        payout: luckyPayout,
+        color: '#8B6FFF',
+        icon: <Trophy size={14} color="#8B6FFF" />,
+      },
+      {
+        label: 'Jackpot Year',
+        desc: 'Top 1% of outcomes',
+        apr: jackpotApr,
+        payout: jackpotPayout,
+        color: '#fbbf24',
+        icon: <Zap size={14} color="#fbbf24" />,
+      },
+    ] : []),
+  ]
 
   const segments = [
     {
@@ -191,6 +284,73 @@ export default function RewardsCalculator() {
             </div>
           </div>
         </div>
+
+        {/* Prize Draw Odds */}
+        {stake > 0 && (
+          <div style={styles.oddsCard}>
+            <div style={styles.oddsHeader}>
+              <div style={{ ...styles.segmentIcon, background: 'rgba(251, 191, 36, 0.1)' }}>
+                <Dices size={14} color="#fbbf24" />
+              </div>
+              <div>
+                <div style={styles.segmentLabel}>Prize Draw Odds</div>
+                <div style={styles.segmentDesc}>
+                  How lucky draws could boost your returns
+                  {snapshotNumHolders > 0 && ` · ${snapshotNumHolders} current stakers`}
+                </div>
+              </div>
+            </div>
+
+            <div style={styles.statsRow}>
+              <div style={styles.statBox}>
+                <div style={styles.statValue}>{formatPct(winProbPerDraw)}</div>
+                <div style={styles.statLabel}>Win chance / draw</div>
+              </div>
+              <div style={styles.statBox}>
+                <div style={styles.statValue}>{formatNumber(regPoolAnnual, 1)} INJ</div>
+                <div style={styles.statLabel}>Regular prizes / yr</div>
+              </div>
+              <div style={styles.statBox}>
+                <div style={styles.statValue}>{formatNumber(bigPoolAnnual, 1)} INJ</div>
+                <div style={styles.statLabel}>Big prizes / yr</div>
+              </div>
+            </div>
+
+            <div style={styles.oddsDivider} />
+
+            <div style={styles.segmentList}>
+              {oddsScenarios.map((s) => (
+                <div key={s.label} style={styles.segmentRow}>
+                  <div style={styles.segmentLeft}>
+                    <div style={{ ...styles.segmentIcon, background: `${s.color}18` }}>
+                      {s.icon}
+                    </div>
+                    <div>
+                      <div style={styles.segmentLabel}>{s.label}</div>
+                      <div style={styles.segmentDesc}>{s.desc}</div>
+                    </div>
+                  </div>
+                  <div style={styles.segmentRight}>
+                    <div style={{ ...styles.segmentValue, color: s.color }}>
+                      {formatNumber(s.apr, 1)}% APR
+                    </div>
+                    <div style={styles.segmentPct}>
+                      +{formatNumber(s.payout, 2)} INJ/yr
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={styles.oddsNote}>
+              Normal staking: {formatNumber(aprPct, 1)}% APR. Your expected return
+              {' '}≈ chain APR minus the {formatNumber((protocolFeeBps / totalBps) * 100, 1)}% protocol fee.
+              {hasVariance
+                ? ' Prize draws add variance — you could earn less or significantly more than normal staking.'
+                : ' As the pool grows with more stakers, individual prizes get larger and outcomes diverge — that\'s where the real excitement comes from.'}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   )
@@ -387,5 +547,55 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 10,
     color: '#8E8EA0',
     marginTop: 1,
+  },
+  oddsCard: {
+    background: '#1A1A22',
+    border: '1px solid #2A2A38',
+    borderRadius: 16,
+    padding: 22,
+    marginTop: 16,
+  },
+  oddsHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  statsRow: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr 1fr',
+    gap: 8,
+    marginBottom: 16,
+  },
+  statBox: {
+    background: '#0F0F13',
+    borderRadius: 10,
+    padding: '12px 10px',
+    textAlign: 'center' as const,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: '#F0F0F5',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  statLabel: {
+    fontSize: 10,
+    color: '#8E8EA0',
+    marginTop: 4,
+  },
+  oddsDivider: {
+    height: 1,
+    background: '#2A2A38',
+    marginBottom: 12,
+  },
+  oddsNote: {
+    fontSize: 11,
+    color: '#8E8EA0',
+    lineHeight: 1.5,
+    marginTop: 14,
+    padding: '10px 12px',
+    background: '#0F0F13',
+    borderRadius: 8,
   },
 }

@@ -261,4 +261,136 @@ mod tests {
         let err = execute(deps.as_mut(), mock_env(), info2, msg).unwrap_err();
         assert!(matches!(err, ContractError::VerificationFailed { .. }));
     }
+
+    // ── Audit V2 tests ──
+
+    #[test]
+    fn test_update_operators() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let admin = deps.api.addr_make("admin");
+        let operator2 = deps.api.addr_make("operator2");
+        let operator3 = deps.api.addr_make("operator3");
+
+        // Non-admin cannot update operators
+        let random = deps.api.addr_make("random");
+        let info = message_info(&random, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::UpdateOperators {
+                add: vec![operator2.to_string()],
+                remove: vec![],
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::Unauthorized { .. }));
+
+        // Admin adds operator2
+        let info = message_info(&admin, &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::UpdateOperators {
+                add: vec![operator2.to_string(), operator3.to_string()],
+                remove: vec![],
+            },
+        )
+        .unwrap();
+
+        let config = CONFIG.load(deps.as_ref().storage).unwrap();
+        assert_eq!(config.operators.len(), 3);
+        assert!(config.operators.contains(&operator2));
+        assert!(config.operators.contains(&operator3));
+
+        // Admin removes operator1
+        let operator1 = deps.api.addr_make("operator1");
+        let admin = deps.api.addr_make("admin");
+        let info = message_info(&admin, &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::UpdateOperators {
+                add: vec![],
+                remove: vec![operator1.to_string()],
+            },
+        )
+        .unwrap();
+
+        let config = CONFIG.load(deps.as_ref().storage).unwrap();
+        assert_eq!(config.operators.len(), 2);
+        assert!(!config.operators.contains(&operator1));
+
+        // Adding duplicate is idempotent
+        let admin = deps.api.addr_make("admin");
+        let info = message_info(&admin, &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::UpdateOperators {
+                add: vec![operator2.to_string()],
+                remove: vec![],
+            },
+        )
+        .unwrap();
+        let config = CONFIG.load(deps.as_ref().storage).unwrap();
+        assert_eq!(config.operators.len(), 2); // No duplicate added
+    }
+
+    #[test]
+    fn test_update_admin() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let admin = deps.api.addr_make("admin");
+        let new_admin = deps.api.addr_make("new_admin");
+
+        // Non-admin cannot update admin
+        let random = deps.api.addr_make("random");
+        let info = message_info(&random, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::UpdateAdmin {
+                new_admin: new_admin.to_string(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::Unauthorized { .. }));
+
+        // Admin can update admin
+        let info = message_info(&admin, &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::UpdateAdmin {
+                new_admin: new_admin.to_string(),
+            },
+        )
+        .unwrap();
+
+        let config = CONFIG.load(deps.as_ref().storage).unwrap();
+        assert_eq!(config.admin, new_admin);
+
+        // Old admin can no longer update
+        let admin = deps.api.addr_make("admin");
+        let info = message_info(&admin, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::UpdateAdmin {
+                new_admin: admin.to_string(),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::Unauthorized { .. }));
+    }
 }

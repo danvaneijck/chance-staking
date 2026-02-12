@@ -28,8 +28,11 @@ pub fn instantiate(
     set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
 
     // Validate bps sum
-    let total_bps =
-        msg.regular_pool_bps + msg.big_pool_bps + msg.base_yield_bps + msg.protocol_fee_bps;
+    // V2-M-01 FIX: Use u32 arithmetic to match error type and avoid potential overflow
+    let total_bps = msg.regular_pool_bps as u32
+        + msg.big_pool_bps as u32
+        + msg.base_yield_bps as u32
+        + msg.protocol_fee_bps as u32;
     if total_bps != 10000 {
         return Err(ContractError::BpsSumMismatch {
             regular: msg.regular_pool_bps,
@@ -63,6 +66,7 @@ pub fn instantiate(
         big_pool_bps: msg.big_pool_bps,
         min_epochs_regular: msg.min_epochs_regular,
         min_epochs_big: msg.min_epochs_big,
+        min_stake_amount: msg.min_stake_amount,
     };
 
     CONFIG.save(deps.storage, &config)?;
@@ -132,6 +136,7 @@ pub fn execute(
             big_pool_bps,
             min_epochs_regular,
             min_epochs_big,
+            min_stake_amount,
         } => execute::update_config(
             deps,
             env,
@@ -144,6 +149,7 @@ pub fn execute(
             big_pool_bps,
             min_epochs_regular,
             min_epochs_big,
+            min_stake_amount,
         ),
         ExecuteMsg::UpdateValidators { add, remove } => {
             execute::update_validators(deps, env, info, add, remove)
@@ -216,6 +222,7 @@ mod tests {
             csinj_subdenom: "csINJ".to_string(),
             min_epochs_regular: 0,
             min_epochs_big: 0,
+            min_stake_amount: Uint128::zero(),
         }
     }
 
@@ -540,7 +547,8 @@ mod tests {
             mock_env(),
             info,
             ExecuteMsg::TakeSnapshot {
-                merkle_root: "abcd1234".to_string(),
+                merkle_root: "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234"
+                    .to_string(),
                 total_weight: Uint128::from(1000u128),
                 num_holders: 5,
                 snapshot_uri: "ipfs://snapshot".to_string(),
@@ -550,7 +558,10 @@ mod tests {
 
         let epoch = EPOCH_STATE.load(deps.as_ref().storage).unwrap();
         assert!(epoch.snapshot_finalized);
-        assert_eq!(epoch.snapshot_merkle_root, Some("abcd1234".to_string()));
+        assert_eq!(
+            epoch.snapshot_merkle_root,
+            Some("abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234".to_string())
+        );
         assert_eq!(epoch.snapshot_total_weight, Uint128::from(1000u128));
         assert_eq!(epoch.snapshot_num_holders, 5);
 
@@ -570,7 +581,8 @@ mod tests {
             mock_env(),
             info.clone(),
             ExecuteMsg::TakeSnapshot {
-                merkle_root: "abcd1234".to_string(),
+                merkle_root: "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234"
+                    .to_string(),
                 total_weight: Uint128::from(1000u128),
                 num_holders: 5,
                 snapshot_uri: "ipfs://snapshot".to_string(),
@@ -584,7 +596,8 @@ mod tests {
             mock_env(),
             info,
             ExecuteMsg::TakeSnapshot {
-                merkle_root: "efgh5678".to_string(),
+                merkle_root: "ef125678ef125678ef125678ef125678ef125678ef125678ef125678ef125678"
+                    .to_string(),
                 total_weight: Uint128::from(2000u128),
                 num_holders: 10,
                 snapshot_uri: "ipfs://snapshot2".to_string(),
@@ -802,5 +815,91 @@ mod tests {
         let config = CONFIG.load(deps.as_ref().storage).unwrap();
         assert_eq!(config.min_epochs_regular, 3);
         assert_eq!(config.min_epochs_big, 7);
+    }
+
+    #[test]
+    fn test_min_stake_amount_enforced() {
+        let mut deps = mock_dependencies();
+        let mut msg = default_instantiate_msg();
+        msg.min_stake_amount = Uint128::new(1_000_000); // 1M minimum
+        let admin = deps.api.addr_make("admin");
+        let info = message_info(&admin, &[]);
+        instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        // Verify config stored correctly
+        let config = CONFIG.load(deps.as_ref().storage).unwrap();
+        assert_eq!(config.min_stake_amount, Uint128::new(1_000_000));
+
+        // Stake below minimum should fail
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(999_999, "inj"));
+        let err = execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap_err();
+        assert!(matches!(err, ContractError::StakeBelowMinimum { .. }));
+
+        // Stake at exactly minimum should succeed
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(1_000_000, "inj"));
+        execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
+
+        // Stake above minimum should succeed
+        let user2 = deps.api.addr_make("user2");
+        let info = message_info(&user2, &coins(2_000_000, "inj"));
+        execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
+    }
+
+    #[test]
+    fn test_min_stake_amount_zero_allows_any() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        // With min_stake_amount = 0, even 1 wei should work
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(1, "inj"));
+        execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
+    }
+
+    #[test]
+    fn test_min_stake_amount_update_config() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        // Initially min_stake_amount is 0
+        let config = CONFIG.load(deps.as_ref().storage).unwrap();
+        assert_eq!(config.min_stake_amount, Uint128::zero());
+
+        // Admin updates min_stake_amount
+        let admin = deps.api.addr_make("admin");
+        let info = message_info(&admin, &[]);
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::UpdateConfig {
+                admin: None,
+                operator: None,
+                protocol_fee_bps: None,
+                base_yield_bps: None,
+                regular_pool_bps: None,
+                big_pool_bps: None,
+                min_epochs_regular: None,
+                min_epochs_big: None,
+                min_stake_amount: Some(Uint128::new(5_000_000)),
+            },
+        )
+        .unwrap();
+
+        let config = CONFIG.load(deps.as_ref().storage).unwrap();
+        assert_eq!(config.min_stake_amount, Uint128::new(5_000_000));
+
+        // Now staking below the new minimum should fail
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(4_999_999, "inj"));
+        let err = execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap_err();
+        assert!(matches!(err, ContractError::StakeBelowMinimum { .. }));
+
+        // Staking at the minimum should succeed
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(5_000_000, "inj"));
+        execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
     }
 }

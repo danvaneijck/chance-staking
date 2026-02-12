@@ -57,6 +57,15 @@ pub fn stake(
     }
 
     let config = CONFIG.load(deps.storage)?;
+
+    // Enforce minimum stake amount
+    if inj_amount < config.min_stake_amount {
+        return Err(ContractError::StakeBelowMinimum {
+            amount: inj_amount,
+            min_stake_amount: config.min_stake_amount,
+        });
+    }
+
     let exchange_rate = EXCHANGE_RATE.load(deps.storage)?;
 
     // Calculate csINJ to mint: inj_amount / exchange_rate
@@ -368,13 +377,12 @@ pub fn distribute_rewards(
     let big_amount = total_rewards.multiply_ratio(config.big_pool_bps as u128, 10000u128);
     let base_yield = total_rewards.multiply_ratio(config.base_yield_bps as u128, 10000u128);
     // L-04 FIX: Calculate treasury_fee as remainder to eliminate rounding dust
+    // V2-L-02 FIX: Use saturating_sub to make intent explicit (remainder can't underflow
+    // because multiply_ratio truncates, but saturating_sub is clearer than unwrap_or(zero))
     let treasury_fee = total_rewards
-        .checked_sub(regular_amount)
-        .unwrap_or(Uint128::zero())
-        .checked_sub(big_amount)
-        .unwrap_or(Uint128::zero())
-        .checked_sub(base_yield)
-        .unwrap_or(Uint128::zero());
+        .saturating_sub(regular_amount)
+        .saturating_sub(big_amount)
+        .saturating_sub(base_yield);
 
     // C-01 FIX: Delegate base yield to validators (prevents double-counting in future epochs)
     let base_yield_delegate_msgs = if !base_yield.is_zero() {
@@ -488,6 +496,18 @@ pub fn take_snapshot(
         });
     }
 
+    // V2-L-01 FIX: Validate merkle_root is valid hex and exactly 64 chars (32 bytes)
+    if merkle_root.len() != 64 {
+        return Err(ContractError::InvalidMerkleRoot {
+            reason: format!("expected 64 hex chars, got {}", merkle_root.len()),
+        });
+    }
+    if hex::decode(&merkle_root).is_err() {
+        return Err(ContractError::InvalidMerkleRoot {
+            reason: "invalid hex encoding".to_string(),
+        });
+    }
+
     let mut epoch_state = EPOCH_STATE.load(deps.storage)?;
 
     if epoch_state.snapshot_finalized {
@@ -543,6 +563,7 @@ pub fn update_config(
     big_pool_bps: Option<u16>,
     min_epochs_regular: Option<u64>,
     min_epochs_big: Option<u64>,
+    min_stake_amount: Option<Uint128>,
 ) -> Result<ContractResponse, ContractError> {
     let mut config = CONFIG.load(deps.storage)?;
 
@@ -582,6 +603,9 @@ pub fn update_config(
     if let Some(val) = min_epochs_big {
         config.min_epochs_big = val;
     }
+    if let Some(val) = min_stake_amount {
+        config.min_stake_amount = val;
+    }
 
     // C-02 FIX: Validate that all BPS fields sum to exactly 10000
     let total_bps = config.regular_pool_bps as u32
@@ -590,12 +614,13 @@ pub fn update_config(
         + config.protocol_fee_bps as u32;
 
     if total_bps != 10000 {
+        // V2-M-01 FIX: Use u32 directly instead of truncating cast to u16
         return Err(ContractError::BpsSumMismatch {
             regular: config.regular_pool_bps,
             big: config.big_pool_bps,
             base_yield: config.base_yield_bps,
             fee: config.protocol_fee_bps,
-            total: total_bps as u16,
+            total: total_bps,
         });
     }
 
@@ -698,6 +723,11 @@ pub fn sync_delegations(
 
     // Update backing to match actual delegations
     TOTAL_INJ_BACKING.save(deps.storage, &total_delegated)?;
+
+    // V2-M-02 FIX: Update EPOCH_STATE.total_staked to reflect actual delegations
+    let mut epoch_state = EPOCH_STATE.load(deps.storage)?;
+    epoch_state.total_staked = total_delegated;
+    EPOCH_STATE.save(deps.storage, &epoch_state)?;
 
     // Recompute exchange rate
     let total_supply = TOTAL_CSINJ_SUPPLY.load(deps.storage)?;

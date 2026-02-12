@@ -6,7 +6,7 @@ import { logger } from "../utils/logger";
 import { generateSecret, computeOperatorCommit, computeWinningTicket } from "../utils/crypto";
 import { generateProof, findWinnerIndex, SnapshotEntry } from "./merkle";
 import { computeLeafHash } from "../utils/crypto";
-import { getCachedSnapshot, getEpochState } from "./epoch";
+import { getCachedSnapshot, getEpochState, SnapshotCache } from "./epoch";
 import { fetchLatestDrandRound, submitSpecificRound, getStoredBeacon } from "./drand";
 
 interface DrawStateInfo {
@@ -323,17 +323,26 @@ export async function checkAndCommitDraws(): Promise<void> {
     }
   }
 
-  // Check big draw: pool has funds and enough epochs have passed
+  // Check big draw: pool has funds, enough epochs have passed, and all
+  // snapshot holders meet min_epochs_big eligibility (since any of them
+  // could be randomly selected as the winner)
+  const snapshot = getCachedSnapshot();
   const bigReady =
     BigInt(drawState.big_pool_balance) > 0n &&
     (drawState.last_big_draw_epoch === null ||
       currentEpoch >= drawState.last_big_draw_epoch + distributorConfig.epochs_between_big);
 
   if (bigReady) {
-    try {
-      await commitDraw("big", currentEpoch);
-    } catch (err) {
-      logger.error("Failed to commit big draw:", err);
+    if (!snapshot || !snapshot.allBigEligible) {
+      logger.info(
+        "Skipping big draw: not all snapshot holders meet min_epochs_big eligibility"
+      );
+    } else {
+      try {
+        await commitDraw("big", currentEpoch);
+      } catch (err) {
+        logger.error("Failed to commit big draw:", err);
+      }
     }
   }
 }

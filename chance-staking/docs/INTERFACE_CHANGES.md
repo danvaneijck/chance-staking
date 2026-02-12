@@ -206,6 +206,6 @@ All 17 audit findings have been addressed:
 ## Questions?
 
 For questions about interface changes or compatibility, refer to:
-- Contract documentation: [CLAUDE.md](CLAUDE.md)
+- Contract documentation: [CLAUDE.md](../../CLAUDE.md)
 - Full audit report: [AUDIT.md](AUDIT.md)
 - Security fix plan: [~/.claude/plans/](~/.claude/plans/)

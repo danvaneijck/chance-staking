@@ -71,6 +71,27 @@ pub enum OracleQueryMsg {
     Beacon { round: u64 },
 }
 
+/// Query messages for the staking hub contract (used for eligibility checks).
+#[cw_serde]
+pub enum StakingHubQueryMsg {
+    Config {},
+    StakerInfo { address: String },
+}
+
+/// Partial staking hub config — only the fields we need.
+#[cw_serde]
+pub struct StakingHubConfigResponse {
+    pub min_epochs_regular: u64,
+    pub min_epochs_big: u64,
+}
+
+/// Staker info response from staking hub.
+#[cw_serde]
+pub struct StakerInfoResponse {
+    pub address: String,
+    pub stake_epoch: Option<u64>,
+}
+
 #[cw_serde]
 #[derive(QueryResponses)]
 pub enum QueryMsg {
