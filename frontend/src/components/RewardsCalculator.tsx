@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Calculator, TrendingUp, Trophy, Sparkles, Landmark } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { formatNumber } from '../utils/formatNumber'
@@ -8,9 +8,19 @@ export default function RewardsCalculator() {
   const regularPoolBps = useStore((s) => s.regularPoolBps)
   const bigPoolBps = useStore((s) => s.bigPoolBps)
   const protocolFeeBps = useStore((s) => s.protocolFeeBps)
+  const onChainApr = useStore((s) => s.stakingApr)
 
   const [stakeAmount, setStakeAmount] = useState('1000')
   const [apr, setApr] = useState('15')
+  const [aprSynced, setAprSynced] = useState(false)
+
+  // Sync slider to on-chain APR once it loads
+  useEffect(() => {
+    if (onChainApr !== null && !aprSynced) {
+      setApr(onChainApr.toFixed(1))
+      setAprSynced(true)
+    }
+  }, [onChainApr, aprSynced])
 
   const stake = parseFloat(stakeAmount) || 0
   const aprPct = parseFloat(apr) || 0
@@ -88,7 +98,7 @@ export default function RewardsCalculator() {
             </div>
             <div style={styles.inputGroup}>
               <label style={styles.inputLabel}>
-                INJ Staking APR
+                INJ Staking APR{onChainApr !== null ? ' (live)' : ''}
               </label>
               <div style={styles.sliderRow}>
                 <input

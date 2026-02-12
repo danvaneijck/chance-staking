@@ -1,6 +1,8 @@
 import {
     ChainGrpcWasmApi,
     ChainGrpcBankApi,
+    ChainGrpcStakingApi,
+    ChainGrpcMintApi,
     MsgExecuteContractCompat,
 } from "@injectivelabs/sdk-ts";
 import { CONTRACTS, ENDPOINTS, INJ_DENOM, getCsinjDenom } from "../config";
@@ -8,6 +10,8 @@ import { CONTRACTS, ENDPOINTS, INJ_DENOM, getCsinjDenom } from "../config";
 // ---------- API instances ----------
 const wasmApi = new ChainGrpcWasmApi(ENDPOINTS.grpc);
 const bankApi = new ChainGrpcBankApi(ENDPOINTS.grpc);
+const stakingApi = new ChainGrpcStakingApi(ENDPOINTS.grpc);
+const mintApi = new ChainGrpcMintApi(ENDPOINTS.grpc);
 
 // ---------- Types ----------
 export interface ExchangeRateResponse {
@@ -234,6 +238,40 @@ export async function fetchStakingHubConfig(): Promise<StakingHubConfig> {
     return queryContract<StakingHubConfig>(CONTRACTS.stakingHub, {
         config: {},
     });
+}
+
+// ---------- On-chain staking APR ----------
+export async function fetchStakingApr(
+    validators: string[],
+): Promise<number | null> {
+    try {
+        const [provisions, pool, ...validatorResults] = await Promise.all([
+            mintApi.fetchAnnualProvisions(),
+            stakingApi.fetchPool(),
+            ...validators.map((addr) =>
+                stakingApi.fetchValidator(addr).catch(() => null),
+            ),
+        ]);
+
+        const annualProvisions = parseFloat(provisions.annualProvisions);
+        const bondedTokens = parseFloat(pool.bondedTokens);
+        if (!bondedTokens || !annualProvisions) return null;
+
+        const nominalApr = annualProvisions / bondedTokens;
+
+        // Average commission across the contract's validators
+        const commissions = validatorResults
+            .filter((v): v is NonNullable<typeof v> => v !== null)
+            .map((v) => parseFloat(v.commission.commissionRates.rate));
+
+        if (commissions.length === 0) return nominalApr * 100;
+
+        const avgCommission =
+            commissions.reduce((a, b) => a + b, 0) / commissions.length;
+        return nominalApr * (1 - avgCommission) * 100;
+    } catch {
+        return null;
+    }
 }
 
 // ---------- Execute message builders ----------

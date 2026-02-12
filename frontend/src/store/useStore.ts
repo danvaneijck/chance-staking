@@ -46,6 +46,7 @@ interface ContractState {
     regularPoolBps: number;
     bigPoolBps: number;
     protocolFeeBps: number;
+    stakingApr: number | null;
 }
 
 interface ConfettiState {
@@ -171,6 +172,7 @@ export const useStore = create<AppState>()(
             regularPoolBps: 7000,
             bigPoolBps: 2000,
             protocolFeeBps: 500,
+            stakingApr: null,
 
             // Confetti state
             showConfetti: false,
@@ -310,6 +312,14 @@ export const useStore = create<AppState>()(
                         snapshotNumHolders:
                             epochState.snapshot_num_holders || 0,
                     });
+
+                    // Fetch on-chain staking APR in background (non-blocking)
+                    contracts
+                        .fetchStakingApr(hubConfig.validators)
+                        .then((apr) => {
+                            if (apr !== null) set({ stakingApr: apr });
+                        })
+                        .catch(() => {});
                 } catch (err: any) {
                     console.error("Failed to fetch contract data:", err);
                 }
