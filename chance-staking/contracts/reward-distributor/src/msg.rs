@@ -4,6 +4,10 @@ use cosmwasm_std::Uint128;
 
 use crate::state::{DistributorConfig, Draw, DrawStateInfo, Snapshot};
 
+// M-03 FIX: Add MigrateMsg for contract upgradability
+#[cw_serde]
+pub struct MigrateMsg {}
+
 #[cw_serde]
 pub struct InstantiateMsg {
     pub operator: String,

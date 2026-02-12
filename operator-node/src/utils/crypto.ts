@@ -41,10 +41,12 @@ export function computeLeafHash(
   cumulativeStart: bigint,
   cumulativeEnd: bigint
 ): Buffer {
+  // M-02 FIX: Add domain separation prefix (0x00) for leaf hashes
+  const prefix = Buffer.from([0x00]);
   const addressBytes = Buffer.from(address, "utf-8");
   const startBytes = bigintToBe16(cumulativeStart);
   const endBytes = bigintToBe16(cumulativeEnd);
-  return sha256(Buffer.concat([addressBytes, startBytes, endBytes]));
+  return sha256(Buffer.concat([prefix, addressBytes, startBytes, endBytes]));
 }
 
 export function bigintToBe16(value: bigint): Buffer {

@@ -3,6 +3,10 @@ use cosmwasm_std::{Decimal, Uint128};
 
 use crate::state::{Config, EpochState, UnstakeRequest};
 
+// M-03 FIX: Add MigrateMsg for contract upgradability
+#[cw_serde]
+pub struct MigrateMsg {}
+
 #[cw_serde]
 pub struct InstantiateMsg {
     pub operator: String,
@@ -49,6 +53,9 @@ pub enum ExecuteMsg {
         admin: Option<String>,
         operator: Option<String>,
         protocol_fee_bps: Option<u16>,
+        base_yield_bps: Option<u16>,
+        regular_pool_bps: Option<u16>,
+        big_pool_bps: Option<u16>,
         min_epochs_regular: Option<u64>,
         min_epochs_big: Option<u64>,
     },
@@ -57,6 +64,9 @@ pub enum ExecuteMsg {
         add: Vec<String>,
         remove: Vec<String>,
     },
+    /// Sync TOTAL_INJ_BACKING with actual validator delegations.
+    /// Call after slashing events. Operator only.
+    SyncDelegations {},
 }
 
 /// Message sent to reward distributor to fund pools.

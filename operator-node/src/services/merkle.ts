@@ -39,11 +39,13 @@ function computeRoot(leaves: Buffer[]): Buffer {
 }
 
 function hashPairSorted(a: Buffer, b: Buffer): Buffer {
+  // M-02 FIX: Add domain separation prefix (0x01) for internal node hashes
+  const prefix = Buffer.from([0x01]);
   const cmp = Buffer.compare(a, b);
   if (cmp <= 0) {
-    return sha256(Buffer.concat([a, b]));
+    return sha256(Buffer.concat([prefix, a, b]));
   } else {
-    return sha256(Buffer.concat([b, a]));
+    return sha256(Buffer.concat([prefix, b, a]));
   }
 }
 

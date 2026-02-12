@@ -56,4 +56,23 @@ pub enum ContractError {
 
     #[error("{pool} pool is empty")]
     EmptyPool { pool: String },
+
+    // H-02 FIX: Invalid epoch error
+    #[error("invalid epoch: provided {provided}, latest snapshot is {latest}")]
+    InvalidEpoch { provided: u64, latest: u64 },
+
+    // H-03 FIX: Zero weight error
+    #[error("cannot commit draw with zero total weight")]
+    ZeroWeight,
+
+    // M-01 FIX: Snapshot already exists error
+    #[error("snapshot for epoch {epoch} already exists")]
+    SnapshotAlreadyExists { epoch: u64 },
+
+    // L-05 FIX: Insufficient contract balance error
+    #[error("insufficient contract balance: required {required}, available {available}")]
+    InsufficientContractBalance {
+        required: cosmwasm_std::Uint128,
+        available: cosmwasm_std::Uint128,
+    },
 }

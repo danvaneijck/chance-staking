@@ -2,12 +2,14 @@ use sha2::{Digest, Sha256};
 
 /// Compute the leaf hash for a Merkle tree entry.
 ///
-/// `leaf_hash = sha256( address_bytes || cumulative_start_u128_be || cumulative_end_u128_be )`
+/// M-02 FIX: Added domain separation prefix (0x00) to distinguish leaf hashes from internal nodes.
+/// `leaf_hash = sha256( 0x00 || address_bytes || cumulative_start_u128_be || cumulative_end_u128_be )`
 ///
 /// The address is the raw bech32 string bytes (not decoded).
 /// cumulative_start and cumulative_end are big-endian u128 (16 bytes each).
 pub fn compute_leaf_hash(address: &str, cumulative_start: u128, cumulative_end: u128) -> [u8; 32] {
     let mut hasher = Sha256::new();
+    hasher.update([0x00]); // M-02 FIX: Leaf prefix
     hasher.update(address.as_bytes());
     hasher.update(cumulative_start.to_be_bytes());
     hasher.update(cumulative_end.to_be_bytes());
@@ -43,6 +45,8 @@ pub fn verify_merkle_proof(root_hex: &str, proof_hex: &[String], leaf_hash: &[u8
         }
 
         let mut hasher = Sha256::new();
+        // M-02 FIX: Internal node prefix for domain separation
+        hasher.update([0x01]);
         // Sorted pair hashing: smaller value first
         if current.as_slice() <= sibling.as_slice() {
             hasher.update(current);
@@ -146,6 +150,7 @@ mod tests {
 
     fn sorted_hash(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
         let mut hasher = Sha256::new();
+        hasher.update([0x01]); // M-02 FIX: Internal node prefix
         if a.as_slice() <= b.as_slice() {
             hasher.update(a);
             hasher.update(b);

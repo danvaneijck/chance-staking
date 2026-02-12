@@ -1,12 +1,12 @@
 use cosmwasm_std::{
-    entry_point, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, StdResult, Uint128,
+    entry_point, Binary, Decimal, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128,
 };
-use cw2::set_contract_version;
+use cw2::{get_contract_version, set_contract_version};
 use injective_cosmwasm::InjectiveMsgWrapper;
 
 use crate::error::ContractError;
 use crate::execute;
-use crate::msg::{ExecuteMsg, InstantiateMsg, QueryMsg};
+use crate::msg::{ExecuteMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 use crate::query;
 use crate::state::{
     Config, EpochState, CONFIG, EPOCH_STATE, EXCHANGE_RATE, PENDING_UNSTAKE_TOTAL,
@@ -38,6 +38,11 @@ pub fn instantiate(
             fee: msg.protocol_fee_bps,
             total: total_bps,
         });
+    }
+
+    // M-04 FIX: Validate validator addresses
+    for validator in &msg.validators {
+        execute::validate_validator_address(validator)?;
     }
 
     // Create Token Factory denom
@@ -122,6 +127,9 @@ pub fn execute(
             admin,
             operator,
             protocol_fee_bps,
+            base_yield_bps,
+            regular_pool_bps,
+            big_pool_bps,
             min_epochs_regular,
             min_epochs_big,
         } => execute::update_config(
@@ -131,12 +139,16 @@ pub fn execute(
             admin,
             operator,
             protocol_fee_bps,
+            base_yield_bps,
+            regular_pool_bps,
+            big_pool_bps,
             min_epochs_regular,
             min_epochs_big,
         ),
         ExecuteMsg::UpdateValidators { add, remove } => {
             execute::update_validators(deps, env, info, add, remove)
         }
+        ExecuteMsg::SyncDelegations {} => execute::sync_delegations(deps, env, info),
     }
 }
 
@@ -155,6 +167,28 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     }
 }
 
+// M-03 FIX: Add migrate entry point for contract upgradability
+#[entry_point]
+pub fn migrate(
+    deps: DepsMut,
+    _env: Env,
+    _msg: MigrateMsg,
+) -> Result<Response<InjectiveMsgWrapper>, ContractError> {
+    let stored = get_contract_version(deps.storage)?;
+    if stored.contract != CONTRACT_NAME {
+        return Err(ContractError::Unauthorized {
+            reason: "Cannot migrate from different contract type".to_string(),
+        });
+    }
+
+    set_contract_version(deps.storage, CONTRACT_NAME, CONTRACT_VERSION)?;
+
+    Ok(Response::new()
+        .add_attribute("action", "migrate")
+        .add_attribute("from_version", stored.version)
+        .add_attribute("to_version", CONTRACT_VERSION))
+}
+
 #[cfg(test)]
 mod tests {
     use crate::state::UNSTAKE_REQUESTS;
@@ -169,7 +203,10 @@ mod tests {
             operator: mock_api.addr_make("operator").to_string(),
             reward_distributor: mock_api.addr_make("distributor").to_string(),
             drand_oracle: mock_api.addr_make("oracle").to_string(),
-            validators: vec!["val1".to_string(), "val2".to_string()],
+            validators: vec![
+                "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+                "injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+            ],
             epoch_duration_seconds: 86400,
             protocol_fee_bps: 500,
             treasury: mock_api.addr_make("treasury").to_string(),
@@ -444,11 +481,14 @@ mod tests {
         execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
 
         // Simulate rewards arriving in contract balance (100M INJ rewards)
-        let env = mock_env();
+        let mut env = mock_env();
         let contract_addr = env.contract.address.clone();
         deps.querier
             .bank
             .update_balance(contract_addr, coins(100_000_000, "inj"));
+
+        // H-01 FIX: Advance time by epoch duration (86400 seconds = 1 day)
+        env.block.time = env.block.time.plus_seconds(86400);
 
         // Distribute rewards (step 2)
         let operator = deps.api.addr_make("operator");
@@ -566,8 +606,8 @@ mod tests {
             mock_env(),
             info,
             ExecuteMsg::UpdateValidators {
-                add: vec!["val3".to_string()],
-                remove: vec!["val1".to_string()],
+                add: vec!["injvaloper1zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".to_string()],
+                remove: vec!["injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string()],
             },
         )
         .unwrap();
@@ -575,7 +615,10 @@ mod tests {
         let config = CONFIG.load(deps.as_ref().storage).unwrap();
         assert_eq!(
             config.validators,
-            vec!["val2".to_string(), "val3".to_string()]
+            vec![
+                "injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+                "injvaloper1zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".to_string()
+            ]
         );
     }
 
@@ -591,7 +634,7 @@ mod tests {
             mock_env(),
             info,
             ExecuteMsg::UpdateValidators {
-                add: vec!["val3".to_string()],
+                add: vec!["injvaloper1zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".to_string()],
                 remove: vec![],
             },
         )
@@ -608,10 +651,10 @@ mod tests {
 
         let env = mock_env();
 
-        // Mock a delegation of 1000 INJ to val1
+        // Mock a delegation of 1000 INJ to injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9
         let delegation = FullDelegation::create(
             env.contract.address.clone(),
-            "val1".to_string(),
+            "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
             Coin::new(1_000_000u128, "inj"),
             Coin::new(1_000_000u128, "inj"),
             vec![],
@@ -625,20 +668,23 @@ mod tests {
             env,
             info,
             ExecuteMsg::UpdateValidators {
-                add: vec!["val3".to_string()],
-                remove: vec!["val1".to_string()],
+                add: vec!["injvaloper1zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".to_string()],
+                remove: vec!["injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string()],
             },
         )
         .unwrap();
 
-        // Should have redelegation messages from val1 to val2 and val3
+        // Should have redelegation messages from injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9 to injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx and injvaloper1zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz
         assert!(res.messages.len() >= 2);
 
         // Check validators updated
         let config = CONFIG.load(deps.as_ref().storage).unwrap();
         assert_eq!(
             config.validators,
-            vec!["val2".to_string(), "val3".to_string()]
+            vec![
+                "injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+                "injvaloper1zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz".to_string()
+            ]
         );
 
         // Check event
@@ -661,7 +707,10 @@ mod tests {
             info,
             ExecuteMsg::UpdateValidators {
                 add: vec![],
-                remove: vec!["val1".to_string(), "val2".to_string()],
+                remove: vec![
+                    "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+                    "injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+                ],
             },
         )
         .unwrap_err();

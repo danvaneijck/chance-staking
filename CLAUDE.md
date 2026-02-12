@@ -432,3 +432,31 @@ The frontend needs to:
 | Stake INJ | staking-hub | `stake` | INJ amount |
 | Unstake csINJ | staking-hub | `unstake` | csINJ amount |
 | Claim unstaked | staking-hub | `claim_unstaked` | none |
+
+---
+
+## Known Design Trade-offs
+
+### Draw Reveal Discretion (L-02)
+
+The operator may choose not to reveal unfavorable draw results by letting them expire.
+While this doesn't result in fund loss (expired draws return funds to pool), it could
+bias the distribution of winners. This is a trade-off for operational simplicity.
+
+**Implications:**
+
+- Operator can selectively reveal only favorable outcomes
+- Funds are not stolen but fairness may be compromised
+- Future versions may implement public reveal mechanisms or operator bonding
+
+### Direct INJ Transfers (L-03)
+
+Sending INJ directly to the staking-hub contract (outside of normal staking flow)
+will cause that INJ to be distributed as rewards in the next epoch. This effectively
+donates to all current stakers and is not a security risk.
+
+**Behavior:**
+
+- Direct transfers are treated as additional staking rewards
+- The INJ is split according to BPS configuration (pools, treasury, base yield)
+- This is by design and allows for voluntary contributions to the reward pool
