@@ -3,9 +3,9 @@
    ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  --primary: #8B6FFF;
-  --primary-light: #A78BFF;
-  --primary-dark: #6B4FD6;
+  --primary: #FDC70C;
+  --primary-light: #E9C46A;
+  --primary-dark: #e3b209;
   --secondary: #38bdf8;
   --accent: #f472b6;
   --background: #0F0F13;
@@ -30,7 +30,7 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 8px 40px rgba(0, 0, 0, 0.6);
-  --shadow-glow: 0 0 48px rgba(139, 111, 255, 0.12);
+  --shadow-glow: 0 0 48px rgba(253, 199, 12, 0.12);
 }
 
 *, *::before, *::after {
@@ -92,11 +92,11 @@ input, textarea {
 input:focus, textarea:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(139, 111, 255, 0.15);
+  box-shadow: 0 0 0 3px rgba(253, 199, 12, 0.15);
 }
 
 ::selection {
-  background: rgba(139, 111, 255, 0.3);
+  background: rgba(253, 199, 12, 0.3);
   color: var(--text);
 }
 
@@ -189,8 +189,8 @@ input:focus, textarea:focus {
 }
 
 @keyframes glowPulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(139, 111, 255, 0.08); }
-  50% { box-shadow: 0 0 30px rgba(139, 111, 255, 0.16); }
+  0%, 100% { box-shadow: 0 0 20px rgba(253, 199, 12, 0.08); }
+  50% { box-shadow: 0 0 30px rgba(253, 199, 12, 0.16); }
 }
 
 .animate-fade-in-up {
@@ -222,12 +222,12 @@ input:focus, textarea:focus {
 /* ═══ Mobile nav drawer hover states ═══ */
 .mobile-nav-drawer a:hover,
 .mobile-nav-drawer a:active {
-  background: rgba(139, 111, 255, 0.08);
+  background: rgba(253, 199, 12, 0.08);
   color: #F0F0F5;
 }
 
 .mobile-nav-drawer button:hover {
-  border-color: rgba(139, 111, 255, 0.3);
+  border-color: rgba(253, 199, 12, 0.3);
 }
 
 /* ═══ Mobile Responsive ═══ */

@@ -236,7 +236,7 @@ export const useStore = create<AppState>()(
                 if (drawId !== null) {
                     window.location.hash = `#/draws/${drawId}`;
                 } else {
-                    window.location.hash = '#/draws';
+                    window.location.hash = "#/draws";
                 }
             },
 
@@ -316,8 +316,7 @@ export const useStore = create<AppState>()(
                         currentEpoch: epochState.current_epoch,
                         epochStartTime: epochState.epoch_start_time,
                         epochDurationSeconds: hubConfig.epoch_duration_seconds,
-                        minEpochsRegular:
-                            hubConfig.min_epochs_regular ?? 0,
+                        minEpochsRegular: hubConfig.min_epochs_regular ?? 0,
                         minEpochsBig: hubConfig.min_epochs_big ?? 0,
                         baseYieldBps: hubConfig.base_yield_bps,
                         regularPoolBps: hubConfig.regular_pool_bps,
@@ -397,6 +396,7 @@ export const useStore = create<AppState>()(
                         startAfter > 0 ? startAfter : undefined,
                         count,
                     );
+                    console.log(draws);
                     if (draws) {
                         const prevDraws = get().recentDraws;
                         const prevRevealedIds = new Set(

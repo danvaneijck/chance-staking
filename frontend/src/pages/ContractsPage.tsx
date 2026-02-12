@@ -6,6 +6,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { CONTRACTS, INJ_DECIMALS } from '../config'
+import { colors } from '../theme'
 import {
   fetchStakingHubConfig,
   fetchExchangeRate,
@@ -44,7 +45,7 @@ const contractCards: ContractDef[] = [
     description: 'Manages INJ staking, csINJ minting/burning via Token Factory, epoch advancement, and reward distribution to prize pools.',
     address: CONTRACTS.stakingHub,
     icon: Layers,
-    color: '#8B6FFF',
+    color: colors.primary,
     queries: [
       { key: 'sh-config', label: 'Config', fn: fetchStakingHubConfig },
       { key: 'sh-exchange', label: 'Exchange Rate', fn: fetchExchangeRate },
@@ -197,7 +198,7 @@ export default function ContractsPage() {
 
           <div className="contracts-stats" style={styles.statsRow}>
             <div style={styles.statCard}>
-              <Code size={16} color="#8B6FFF" />
+              <Code size={16} color={colors.primary} />
               <div>
                 <div style={styles.statValue}>3</div>
                 <div style={styles.statLabel}>Contracts</div>
@@ -465,7 +466,7 @@ const styles: Record<string, React.CSSProperties> = {
   // Hero
   hero: {
     padding: '56px 0 0',
-    background: 'linear-gradient(180deg, rgba(139, 111, 255, 0.04) 0%, transparent 100%)',
+    background: `linear-gradient(180deg, ${colors.primaryAlpha(0.04)} 0%, transparent 100%)`,
   },
   heroContainer: {
     maxWidth: 720,

@@ -4,6 +4,7 @@ import {
   Shield, ChevronRight, Menu, X, ArrowRight, ArrowDown,
   type LucideIcon,
 } from 'lucide-react'
+import { colors } from '../theme'
 
 // ── Sidebar navigation ──
 interface NavItem {
@@ -82,8 +83,8 @@ function OverviewSection() {
       </Paragraph>
 
       <div style={styles.archGrid}>
-        <div style={{ ...styles.archCard, borderColor: 'rgba(139, 111, 255, 0.3)' }}>
-          <Layers size={20} color="#8B6FFF" />
+        <div style={{ ...styles.archCard, borderColor: colors.primaryAlpha(0.3) }}>
+          <Layers size={20} color={colors.primary} />
           <h4 style={styles.archTitle}>Staking Hub</h4>
           <p style={styles.archDesc}>
             Core contract. Manages INJ staking, csINJ minting/burning via Token Factory,
@@ -158,7 +159,7 @@ function OverviewSection() {
       </Paragraph>
       <div style={styles.bpsGrid}>
         <div style={styles.bpsItem}>
-          <div style={{ ...styles.bpsDot, background: '#8B6FFF' }} />
+          <div style={{ ...styles.bpsDot, background: colors.primary }} />
           <span><strong>Regular Pool</strong> — 70% (7000 bps)</span>
         </div>
         <div style={styles.bpsItem}>
@@ -925,7 +926,7 @@ export default function DocsPage() {
                 ...(activeSection === item.key ? styles.sidebarItemActive : {}),
               }}
             >
-              {item.icon && <item.icon size={14} color={activeSection === item.key ? '#8B6FFF' : '#8E8EA0'} />}
+              {item.icon && <item.icon size={14} color={activeSection === item.key ? colors.primary : '#8E8EA0'} />}
               {item.parent && <ChevronRight size={10} color="#525260" style={{ marginRight: -2 }} />}
               {item.title}
             </button>
@@ -949,7 +950,7 @@ const styles: Record<string, React.CSSProperties> = {
   // Hero
   hero: {
     padding: '56px 0 0',
-    background: 'linear-gradient(180deg, rgba(139, 111, 255, 0.04) 0%, transparent 100%)',
+    background: `linear-gradient(180deg, ${colors.primaryAlpha(0.04)} 0%, transparent 100%)`,
   },
   heroContainer: {
     maxWidth: 720,
@@ -1034,7 +1035,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sidebarItemActive: {
     color: '#F0F0F5',
-    background: 'rgba(139, 111, 255, 0.08)',
+    background: colors.primaryAlpha(0.08),
     fontWeight: 600,
   },
 
@@ -1172,8 +1173,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: 24,
     height: 24,
     borderRadius: '50%',
-    background: 'rgba(139, 111, 255, 0.12)',
-    color: '#8B6FFF',
+    background: colors.primaryAlpha(0.12),
+    color: colors.primary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1221,7 +1222,7 @@ const styles: Record<string, React.CSSProperties> = {
   flowLabel: {
     fontSize: 13,
     fontWeight: 700,
-    color: '#8B6FFF',
+    color: colors.primary,
     marginBottom: 6,
   },
   flowDesc: {

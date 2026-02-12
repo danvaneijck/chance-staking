@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Trophy, Clock, ChevronRight, Gift, Users, Coins, Radio } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { formatInj } from '../utils/formatNumber'
+import { colors } from '../theme'
 
 function truncateAddr(addr: string): string {
   if (!addr) return ''
@@ -63,8 +64,8 @@ export default function DrawsSection({ fullPage = false }: DrawsSectionProps) {
         <div className="draws-pool-grid" style={styles.poolGrid}>
           <div style={styles.poolCard}>
             <div style={styles.poolHeader}>
-              <div style={{ ...styles.poolIcon, background: 'rgba(139, 111, 255, 0.1)' }}>
-                <Coins size={18} color="#8B6FFF" />
+              <div style={{ ...styles.poolIcon, background: colors.primaryAlpha(0.1) }}>
+                <Coins size={18} color={colors.primary} />
               </div>
               <div>
                 <div style={styles.poolLabel}>Regular Pool</div>
@@ -158,8 +159,8 @@ export default function DrawsSection({ fullPage = false }: DrawsSectionProps) {
                       ...styles.drawTypeBadge,
                       background: draw.draw_type === 'big'
                         ? 'rgba(244, 114, 182, 0.1)'
-                        : 'rgba(139, 111, 255, 0.1)',
-                      color: draw.draw_type === 'big' ? '#f472b6' : '#8B6FFF',
+                        : colors.primaryAlpha(0.1),
+                      color: draw.draw_type === 'big' ? '#f472b6' : colors.primary,
                     }}>
                       <Radio size={11} style={{ animation: 'pulse 2s ease-in-out infinite' }} />
                       #{draw.id}
@@ -211,8 +212,8 @@ export default function DrawsSection({ fullPage = false }: DrawsSectionProps) {
                   ...styles.drawTypeBadge,
                   background: draw.draw_type === 'big'
                     ? 'rgba(244, 114, 182, 0.1)'
-                    : 'rgba(139, 111, 255, 0.1)',
-                  color: draw.draw_type === 'big' ? '#f472b6' : '#8B6FFF',
+                    : colors.primaryAlpha(0.1),
+                  color: draw.draw_type === 'big' ? '#f472b6' : colors.primary,
                 }}>
                   {draw.draw_type === 'big' ? '🏆' : '✨'} #{draw.id}
                 </div>
@@ -342,7 +343,7 @@ const styles: Record<string, React.CSSProperties> = {
   poolProgressBar: {
     height: '100%',
     borderRadius: 2,
-    background: 'linear-gradient(90deg, #8B6FFF, #6B4FD6)',
+    background: `linear-gradient(90deg, ${colors.primary}, ${colors.primaryDark})`,
     transition: 'width 0.5s ease',
   },
   filterRow: {
@@ -362,9 +363,9 @@ const styles: Record<string, React.CSSProperties> = {
     transition: 'all 0.2s',
   },
   filterTabActive: {
-    background: 'rgba(139, 111, 255, 0.08)',
-    color: '#8B6FFF',
-    border: '1px solid rgba(139, 111, 255, 0.15)',
+    background: colors.primaryAlpha(0.08),
+    color: colors.primary,
+    border: `1px solid ${colors.primaryAlpha(0.15)}`,
   },
   liveSection: {
     marginBottom: 12,

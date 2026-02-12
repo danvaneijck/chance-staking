@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { ArrowDownUp, TrendingUp, Clock, Shield, Loader } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { colors } from '../theme'
 import { INJ_DECIMALS } from '../config'
 import { formatInjString, formatNumber } from '../utils/formatNumber'
 
@@ -123,7 +124,7 @@ export default function StakingPanel() {
               {/* Arrow */}
               <div style={styles.arrowContainer}>
                 <div style={styles.arrowCircle}>
-                  <ArrowDownUp size={15} color="#8B6FFF" />
+                  <ArrowDownUp size={15} color={colors.primary} />
                 </div>
               </div>
 
@@ -202,11 +203,11 @@ export default function StakingPanel() {
 
             <div
               style={styles.infoCard}
-              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(139, 111, 255, 0.2)' }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = colors.primaryAlpha(0.2) }}
               onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = '#2A2A38' }}
             >
-              <div style={{ ...styles.infoIconWrap, background: 'rgba(139, 111, 255, 0.1)' }}>
-                <Shield size={18} color="#8B6FFF" />
+              <div style={{ ...styles.infoIconWrap, background: colors.primaryAlpha(0.1) }}>
+                <Shield size={18} color={colors.primary} />
               </div>
               <h3 style={styles.infoTitle}>Prize Draws</h3>
               <div style={styles.infoValue}>70% Regular + 20% Big</div>
@@ -259,7 +260,7 @@ const styles: Record<string, React.CSSProperties> = {
     border: '1px solid #2A2A38',
     borderRadius: 20,
     overflow: 'hidden',
-    boxShadow: '0 0 48px rgba(139, 111, 255, 0.04)',
+    boxShadow: `0 0 48px ${colors.primaryAlpha(0.04)}`,
   },
   cardHeader: {
     padding: '18px 20px 0',
@@ -360,8 +361,8 @@ const styles: Record<string, React.CSSProperties> = {
   maxButton: {
     fontSize: 10,
     fontWeight: 700,
-    color: '#8B6FFF',
-    background: 'rgba(139, 111, 255, 0.08)',
+    color: colors.primary,
+    background: colors.primaryAlpha(0.08),
     border: 'none',
     borderRadius: 6,
     padding: '3px 8px',
@@ -417,14 +418,14 @@ const styles: Record<string, React.CSSProperties> = {
     width: '100%',
     padding: '14px',
     borderRadius: 14,
-    background: 'linear-gradient(135deg, #8B6FFF, #6B4FD6)',
-    color: '#FFFFFF',
+    background: colors.primaryGradient,
+    color: '#020202',
     fontSize: 15,
     fontWeight: 700,
     border: 'none',
     cursor: 'pointer',
     transition: 'all 0.3s',
-    boxShadow: '0 0 24px rgba(139, 111, 255, 0.15)',
+    boxShadow: `0 0 24px ${colors.primaryAlpha(0.15)}`,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -461,7 +462,7 @@ const styles: Record<string, React.CSSProperties> = {
   infoValue: {
     fontSize: 13,
     fontWeight: 600,
-    color: '#8B6FFF',
+    color: colors.primary,
     marginBottom: 8,
   },
   infoDesc: {

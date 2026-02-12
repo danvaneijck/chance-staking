@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Shield, ExternalLink, Percent, TrendingUp, Coins, PieChart } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { colors } from '../theme'
 import { formatNumber } from '../utils/formatNumber'
 import * as contracts from '../services/contracts'
 
@@ -114,7 +115,7 @@ export default function ValidatorsPage() {
 
           <div className="validators-page-stats" style={styles.statsRow}>
             <div style={styles.statCard}>
-              <Coins size={16} color="#8B6FFF" />
+              <Coins size={16} color={colors.primary} />
               <div>
                 <div style={styles.statValue}>{formatNumber(totalDelegated, 1)} INJ</div>
                 <div style={styles.statLabel}>Total Delegated</div>
@@ -161,7 +162,7 @@ export default function ValidatorsPage() {
                   <div style={styles.cardHeader}>
                     <div style={styles.monikerRow}>
                       <div style={styles.validatorIcon}>
-                        <Shield size={16} color="#8B6FFF" />
+                        <Shield size={16} color={colors.primary} />
                       </div>
                       <div>
                         <div style={styles.moniker}>{v.moniker}</div>
@@ -210,10 +211,10 @@ export default function ValidatorsPage() {
                     </div>
                     <div style={styles.metricRow}>
                       <div style={styles.metricLeft}>
-                        <PieChart size={13} color="#8B6FFF" />
+                        <PieChart size={13} color={colors.primary} />
                         <span style={styles.metricLabel}>Allocation</span>
                       </div>
-                      <span style={{ ...styles.metricValue, color: '#8B6FFF' }}>
+                      <span style={{ ...styles.metricValue, color: colors.primary }}>
                         {formatNumber(v.shareOfTotal, 1)}%
                       </span>
                     </div>
@@ -253,7 +254,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   hero: {
     padding: '48px 0 0',
-    background: 'linear-gradient(180deg, rgba(139, 111, 255, 0.04) 0%, transparent 100%)',
+    background: `linear-gradient(180deg, ${colors.primaryAlpha(0.04)} 0%, transparent 100%)`,
   },
   heroContainer: {
     maxWidth: 1280,
@@ -337,7 +338,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 36,
     height: 36,
     borderRadius: 10,
-    background: 'rgba(139, 111, 255, 0.1)',
+    background: colors.primaryAlpha(0.1),
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -395,7 +396,7 @@ const styles: Record<string, React.CSSProperties> = {
   allocFill: {
     height: '100%',
     borderRadius: 2,
-    background: 'linear-gradient(90deg, #8B6FFF, #6B4FD6)',
+    background: colors.primaryGradient,
     transition: 'width 0.4s ease',
   },
   skeletonCard: {

@@ -70,6 +70,18 @@ pub enum ExecuteMsg {
     /// Sync TOTAL_INJ_BACKING with actual validator delegations.
     /// Call after slashing events. Operator only.
     SyncDelegations {},
+    /// Redelegate a specific amount of INJ from one validator to another.
+    /// Both validators must be in the active validator set. Operator only.
+    RedelegateStake {
+        src_validator: String,
+        dst_validator: String,
+        amount: Uint128,
+    },
+    /// Rebalance delegations across validators to match target weights.
+    /// Weights are relative (e.g. [1, 1, 2] = 25%/25%/50%). Operator only.
+    RebalanceStake {
+        validator_weights: Vec<ValidatorWeight>,
+    },
 }
 
 /// Message sent to reward distributor to fund pools.
@@ -102,6 +114,8 @@ pub enum QueryMsg {
     },
     #[returns(StakerInfoResponse)]
     StakerInfo { address: String },
+    #[returns(ValidatorDelegationsResponse)]
+    ValidatorDelegations {},
 }
 
 #[cw_serde]
@@ -122,4 +136,22 @@ pub struct StakerInfoResponse {
     pub address: String,
     /// The epoch of this user's most recent stake, or None if they have never staked.
     pub stake_epoch: Option<u64>,
+}
+
+#[cw_serde]
+pub struct ValidatorWeight {
+    pub validator: String,
+    pub weight: u64,
+}
+
+#[cw_serde]
+pub struct ValidatorDelegation {
+    pub validator: String,
+    pub amount: Uint128,
+}
+
+#[cw_serde]
+pub struct ValidatorDelegationsResponse {
+    pub delegations: Vec<ValidatorDelegation>,
+    pub total_delegated: Uint128,
 }

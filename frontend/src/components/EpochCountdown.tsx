@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Timer } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { colors } from '../theme'
 
 interface EpochCountdownProps {
   compact?: boolean
@@ -103,7 +104,7 @@ export default function EpochCountdown({ compact = false }: EpochCountdownProps)
           width: `${progress}%`,
           background: isAlmostDone
             ? 'linear-gradient(90deg, #f59e0b, #ef4444)'
-            : 'linear-gradient(90deg, #8B6FFF, #38bdf8)',
+            : `linear-gradient(90deg, ${colors.primary}, #38bdf8)`,
         }} />
       </div>
     </div>

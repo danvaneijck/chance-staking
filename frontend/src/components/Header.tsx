@@ -2,8 +2,12 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Sparkles, ChevronDown, Wallet, LogOut, Copy, Check, Menu, X } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import type { WalletType } from '../store/useStore'
+import { NETWORK } from '../config'
+import { colors } from '../theme'
 import RpcSelector from './RpcSelector'
 import RpcModal from './RpcModal'
+
+const isTestnet = (NETWORK as string).toLowerCase().includes('testnet')
 
 const navLinks = [
   { href: '#/stake', label: 'Stake' },
@@ -89,13 +93,16 @@ export default function Header() {
           <a href="#/" style={{ textDecoration: 'none' }}>
             <div style={styles.logoSection}>
               <div style={styles.logoIcon}>
-                <Sparkles size={22} color="#8B6FFF" />
+                <Sparkles size={22} color={colors.primary} />
               </div>
               <div style={styles.logoText}>
                 <span style={styles.logoName}>Chance</span>
                 <span style={styles.logoDot}>.</span>
                 <span style={styles.logoSuffix}>Staking</span>
               </div>
+              <span style={isTestnet ? styles.networkBadgeTestnet : styles.networkBadgeMainnet}>
+                {isTestnet ? 'Testnet' : 'Mainnet'}
+              </span>
             </div>
           </a>
 
@@ -143,7 +150,7 @@ export default function Header() {
                           setShowWalletMenu(false)
                         }}
                         onMouseEnter={(e) => {
-                          (e.currentTarget as HTMLButtonElement).style.background = 'rgba(139, 111, 255, 0.08)'
+                          (e.currentTarget as HTMLButtonElement).style.background = colors.primaryAlpha(0.08)
                         }}
                         onMouseLeave={(e) => {
                           (e.currentTarget as HTMLButtonElement).style.background = 'transparent'
@@ -182,7 +189,7 @@ export default function Header() {
                     <button
                       style={styles.accountAction}
                       onClick={copyAddress}
-                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(139, 111, 255, 0.06)' }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = colors.primaryAlpha(0.06) }}
                       onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
                     >
                       {copied ? <Check size={14} color="#22c55e" /> : <Copy size={14} />}
@@ -238,7 +245,7 @@ export default function Header() {
         <div style={styles.mobileDrawerHeader}>
           <div style={styles.logoSection}>
             <div style={styles.logoIcon}>
-              <Sparkles size={20} color="#8B6FFF" />
+              <Sparkles size={20} color={colors.primary} />
             </div>
             <div style={styles.logoText}>
               <span style={{ ...styles.logoName, fontSize: 18 }}>Chance</span>
@@ -380,7 +387,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 36,
     height: 36,
     borderRadius: 10,
-    background: 'rgba(139, 111, 255, 0.1)',
+    background: colors.primaryAlpha(0.1),
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -399,13 +406,37 @@ const styles: Record<string, React.CSSProperties> = {
   logoDot: {
     fontSize: 20,
     fontWeight: 800,
-    color: '#8B6FFF',
+    color: colors.primary,
   },
   logoSuffix: {
     fontSize: 20,
     fontWeight: 500,
     color: '#8E8EA0',
     letterSpacing: '-0.02em',
+  },
+  networkBadgeTestnet: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: '#f59e0b',
+    background: 'rgba(245, 158, 11, 0.1)',
+    border: '1px solid rgba(245, 158, 11, 0.2)',
+    borderRadius: 6,
+    padding: '2px 7px',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase' as const,
+    lineHeight: '16px',
+  },
+  networkBadgeMainnet: {
+    fontSize: 10,
+    fontWeight: 700,
+    color: '#22c55e',
+    background: 'rgba(34, 197, 94, 0.1)',
+    border: '1px solid rgba(34, 197, 94, 0.2)',
+    borderRadius: 6,
+    padding: '2px 7px',
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase' as const,
+    lineHeight: '16px',
   },
   nav: {
     display: 'flex',
@@ -428,14 +459,14 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 8,
     padding: '9px 20px',
     borderRadius: 10,
-    background: 'linear-gradient(135deg, #8B6FFF, #6B4FD6)',
-    color: '#FFFFFF',
+    background: colors.primaryGradient,
+    color: '#020202',
     fontSize: 13,
     fontWeight: 600,
     border: 'none',
     cursor: 'pointer',
     transition: 'all 0.2s',
-    boxShadow: '0 0 20px rgba(139, 111, 255, 0.15)',
+    boxShadow: `0 0 20px ${colors.primaryAlpha(0.15)}`,
   },
   walletDropdown: {
     position: 'absolute' as const,

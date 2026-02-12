@@ -4,6 +4,7 @@ import {
   Shield, Lock, ChevronDown, Eye, Hash, Target, Layers, FileCheck
 } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { colors } from '../theme'
 import { formatNumber } from '../utils/formatNumber'
 import RewardsCalculator from '../components/RewardsCalculator'
 
@@ -11,9 +12,9 @@ import RewardsCalculator from '../components/RewardsCalculator'
 const steps = [
   {
     icon: Coins,
-    color: '#8B6FFF',
-    bg: 'rgba(139, 111, 255, 0.1)',
-    borderColor: 'rgba(139, 111, 255, 0.2)',
+    color: colors.primary,
+    bg: colors.primaryAlpha(0.1),
+    borderColor: colors.primaryAlpha(0.2),
     title: 'Stake INJ',
     short: 'Deposit INJ and receive csINJ',
     detail: 'When you stake INJ, the protocol delegates it across multiple validators for native staking. You receive csINJ — a liquid staking token whose exchange rate against INJ increases over time as staking rewards accrue. csINJ can be held, transferred, or used in DeFi while your INJ earns rewards.',
@@ -49,7 +50,7 @@ const steps = [
 
 // ── Reward distribution data ──
 const distributions = [
-  { label: 'Regular Draws', pct: 70, color: '#8B6FFF', gradient: 'linear-gradient(90deg, #8B6FFF, #6B4FD6)' },
+  { label: 'Regular Draws', pct: 70, color: colors.primary, gradient: `linear-gradient(90deg, ${colors.primary}, ${colors.primaryDark})` },
   { label: 'Big Weekly Draw', pct: 20, color: '#f472b6', gradient: 'linear-gradient(90deg, #f472b6, #ec4899)' },
   { label: 'Base Yield', pct: 5, color: '#22c55e', gradient: '#22c55e' },
   { label: 'Protocol Fee', pct: 5, color: '#f59e0b', gradient: '#f59e0b' },
@@ -66,7 +67,7 @@ const drawSteps = [
   },
   {
     icon: Lock,
-    color: '#8B6FFF',
+    color: colors.primary,
     title: '2. Commit',
     desc: 'The operator commits a hash of their secret along with a target drand round number. This locks in the randomness source before the beacon is produced.',
     code: 'operator_commit = sha256(secret)',
@@ -139,7 +140,8 @@ export default function HowItWorksPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null)
 
   const epochHours = epochDurationSeconds / 3600
-  const epochDisplay = epochHours >= 24 ? `${(epochHours / 24).toFixed(0)} day${epochHours >= 48 ? 's' : ''}` : `${epochHours.toFixed(0)} hours`
+  const epochMins = epochDurationSeconds / 60
+  const epochDisplay = epochHours >= 24 ? `${(epochHours / 24).toFixed(0)} day${epochHours >= 48 ? 's' : ''}` : `${epochMins.toFixed(0)} minutes`
 
   return (
     <div style={styles.page}>
@@ -245,7 +247,7 @@ export default function HowItWorksPage() {
             </div>
 
             <div style={styles.distDetail}>
-              <p><strong style={{ color: '#8B6FFF' }}>Regular Draws (70%)</strong> — The majority of rewards fund frequent prize draws. Every epoch a regular draw can occur, giving stakers regular chances to win.</p>
+              <p><strong style={{ color: colors.primary }}>Regular Draws (70%)</strong> — The majority of rewards fund frequent prize draws. Every epoch a regular draw can occur, giving stakers regular chances to win.</p>
               <p><strong style={{ color: '#f472b6' }}>Big Jackpot (20%)</strong> — A larger pool accumulates over multiple epochs for bigger, less frequent draws with larger prizes.</p>
               <p><strong style={{ color: '#22c55e' }}>Base Yield (5%)</strong> — Directly increases the csINJ exchange rate, providing guaranteed returns to all holders regardless of draw outcomes.</p>
               <p><strong style={{ color: '#f59e0b' }}>Protocol Fee (5%)</strong> — Sustains protocol operations, development, and infrastructure.</p>
@@ -266,11 +268,11 @@ export default function HowItWorksPage() {
               <div style={styles.timingValue}>{epochDisplay}</div>
               <div style={styles.timingLabel}>Epoch Duration</div>
               <div style={styles.timingDetail}>
-                Each epoch is {formatNumber(epochDurationSeconds, 0)} seconds. At the end of each epoch, staking rewards are claimed, distributed, and a new snapshot can be taken.
+                Each epoch is {formatNumber(epochDurationSeconds / 60, 0)} minutes. At the end of each epoch, staking rewards are claimed, distributed, and a new snapshot can be taken.
               </div>
             </div>
             <div style={styles.timingCard}>
-              <Trophy size={20} color="#8B6FFF" />
+              <Trophy size={20} color={colors.primary} />
               <div style={styles.timingValue}>Every {minEpochsRegular || 1} epoch{(minEpochsRegular || 1) > 1 ? 's' : ''}</div>
               <div style={styles.timingLabel}>Regular Draws</div>
               <div style={styles.timingDetail}>
@@ -295,7 +297,7 @@ export default function HowItWorksPage() {
                 <div key={i} style={styles.timelineStep}>
                   <div style={{
                     ...styles.timelineDot,
-                    background: i === 5 ? '#22c55e' : i === 4 ? '#f59e0b' : '#8B6FFF',
+                    background: i === 5 ? '#22c55e' : i === 4 ? '#f59e0b' : colors.primary,
                   }} />
                   <span style={styles.timelineLabel}>{label}</span>
                   {i < 5 && <div style={styles.timelineLine} />}
@@ -357,8 +359,8 @@ export default function HowItWorksPage() {
               </p>
             </div>
             <div style={styles.securityCard}>
-              <div style={{ ...styles.securityIcon, background: 'rgba(139, 111, 255, 0.1)' }}>
-                <Lock size={20} color="#8B6FFF" />
+              <div style={{ ...styles.securityIcon, background: colors.primaryAlpha(0.1) }}>
+                <Lock size={20} color={colors.primary} />
               </div>
               <h3 style={styles.securityTitle}>Commit-Reveal Scheme</h3>
               <p style={styles.securityDesc}>
@@ -389,7 +391,7 @@ export default function HowItWorksPage() {
                 key={i}
                 style={{
                   ...styles.faqItem,
-                  borderColor: openFaq === i ? 'rgba(139, 111, 255, 0.3)' : '#2A2A38',
+                  borderColor: openFaq === i ? colors.primaryAlpha(0.3) : '#2A2A38',
                 }}
               >
                 <button
@@ -445,7 +447,7 @@ const styles: Record<string, React.CSSProperties> = {
   // ── Hero ──
   hero: {
     padding: '56px 0 0',
-    background: 'linear-gradient(180deg, rgba(139, 111, 255, 0.04) 0%, transparent 100%)',
+    background: `linear-gradient(180deg, ${colors.primaryAlpha(0.04)} 0%, transparent 100%)`,
   },
   heroContainer: {
     maxWidth: 720,
@@ -532,7 +534,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   stepShort: {
     fontSize: 12,
-    color: '#8B6FFF',
+    color: colors.primary,
     fontWeight: 600,
     marginBottom: 8,
   },
@@ -821,8 +823,8 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '0 0 80px',
   },
   ctaCard: {
-    background: 'linear-gradient(135deg, rgba(139, 111, 255, 0.08), rgba(56, 189, 248, 0.05))',
-    border: '1px solid rgba(139, 111, 255, 0.2)',
+    background: `linear-gradient(135deg, ${colors.primaryAlpha(0.08)}, rgba(56, 189, 248, 0.05))`,
+    border: `1px solid ${colors.primaryAlpha(0.2)}`,
     borderRadius: 20,
     padding: '48px 32px',
     textAlign: 'center' as const,
@@ -851,8 +853,8 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     padding: '12px 28px',
     borderRadius: 10,
-    background: 'linear-gradient(135deg, #8B6FFF, #6B4FD6)',
-    color: '#FFFFFF',
+    background: colors.primaryGradient,
+    color: '#020202',
     fontSize: 14,
     fontWeight: 600,
     textDecoration: 'none',

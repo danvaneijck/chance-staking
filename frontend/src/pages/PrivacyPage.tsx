@@ -1,4 +1,5 @@
 import React from 'react'
+import { colors } from '../theme'
 
 export default function PrivacyPage() {
   return (
@@ -161,7 +162,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   hero: {
     padding: '56px 0 0',
-    background: 'linear-gradient(180deg, rgba(139, 111, 255, 0.04) 0%, transparent 100%)',
+    background: `linear-gradient(180deg, ${colors.primaryAlpha(0.04)} 0%, transparent 100%)`,
   },
   heroContainer: {
     maxWidth: 720,
@@ -212,7 +213,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 4,
   },
   link: {
-    color: '#8B6FFF',
+    color: colors.primary,
     textDecoration: 'underline',
   },
 }

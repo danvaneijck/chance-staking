@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Calculator, TrendingUp, Trophy, Sparkles, Landmark, Dices, Shield, Target, Zap, CloudRain } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { colors } from '../theme'
 import { formatNumber } from '../utils/formatNumber'
 
 export default function RewardsCalculator() {
@@ -142,8 +143,8 @@ export default function RewardsCalculator() {
         desc: 'Top 10% of outcomes',
         apr: luckyApr,
         payout: luckyPayout,
-        color: '#8B6FFF',
-        icon: <Trophy size={14} color="#8B6FFF" />,
+        color: colors.primary,
+        icon: <Trophy size={14} color={colors.primary} />,
       },
       {
         label: 'Jackpot Year',
@@ -170,8 +171,8 @@ export default function RewardsCalculator() {
       desc: 'Weighted by csINJ balance',
       value: regularPool,
       bps: regularPoolBps,
-      color: '#8B6FFF',
-      icon: <Trophy size={14} color="#8B6FFF" />,
+      color: colors.primary,
+      icon: <Trophy size={14} color={colors.primary} />,
     },
     {
       label: 'Big Jackpot Pool',
@@ -196,7 +197,7 @@ export default function RewardsCalculator() {
       <div className="section-container" style={styles.container}>
         <div style={styles.header}>
           <div style={styles.headerIcon}>
-            <Calculator size={18} color="#8B6FFF" />
+            <Calculator size={18} color={colors.primary} />
           </div>
           <div>
             <h2 style={styles.title}>Rewards Calculator</h2>
@@ -254,7 +255,7 @@ export default function RewardsCalculator() {
               </div>
               <div style={styles.summaryRow}>
                 <span style={styles.summaryLabel}>Prize Pool Contribution</span>
-                <span style={{ ...styles.summaryValue, color: '#8B6FFF' }}>
+                <span style={{ ...styles.summaryValue, color: colors.primary }}>
                   {formatNumber(regularPool + bigPool, 2)} INJ/yr
                 </span>
               </div>
@@ -368,7 +369,7 @@ export default function RewardsCalculator() {
                       { payout: floorPayout, color: '#22c55e', label: 'Floor' },
                       { payout: unluckyPayout, color: '#f87171', label: 'Unlucky' },
                       { payout: expectedPayout, color: '#60a5fa', label: 'Typical' },
-                      { payout: luckyPayout, color: '#8B6FFF', label: 'Lucky' },
+                      { payout: luckyPayout, color: colors.primary, label: 'Lucky' },
                       { payout: jackpotPayout, color: '#fbbf24', label: 'Jackpot' },
                     ]
                     return (
@@ -378,7 +379,7 @@ export default function RewardsCalculator() {
                           position: 'absolute',
                           inset: 0,
                           borderRadius: 4,
-                          background: 'linear-gradient(90deg, #22c55e 0%, #f87171 15%, #60a5fa 40%, #8B6FFF 70%, #fbbf24 100%)',
+                          background: `linear-gradient(90deg, #22c55e 0%, #f87171 15%, #60a5fa 40%, ${colors.primary} 70%, #fbbf24 100%)`,
                           opacity: 0.3,
                         }} />
                         {/* Filled portion up to expected */}
@@ -480,7 +481,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 44,
     height: 44,
     borderRadius: 12,
-    background: 'rgba(139, 111, 255, 0.1)',
+    background: colors.primaryAlpha(0.1),
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -546,7 +547,7 @@ const styles: Record<string, React.CSSProperties> = {
     flex: 1,
     height: 4,
     appearance: 'auto' as const,
-    accentColor: '#8B6FFF',
+    accentColor: colors.primary,
     cursor: 'pointer',
   },
   aprBadge: {

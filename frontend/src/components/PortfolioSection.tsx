@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Clock, Trophy, Download, Loader, Target, ShieldCheck, ShieldAlert } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { formatInj, formatNumber } from '../utils/formatNumber'
+import { colors } from '../theme'
 
 function formatTimestamp(nanos: string): string {
   const ms = parseInt(nanos) / 1e6
@@ -175,7 +176,7 @@ export default function PortfolioSection() {
               <div style={styles.oddsCard}>
                 <div style={styles.oddsHeader}>
                   <div style={styles.oddsIconWrap}>
-                    <Target size={16} color="#8B6FFF" />
+                    <Target size={16} color={colors.primary} />
                   </div>
                   <div>
                     <div style={styles.oddsTitle}>Your Draw Odds</div>
@@ -309,11 +310,11 @@ export default function PortfolioSection() {
                     ...styles.winIcon,
                     background: draw.draw_type === 'big'
                       ? 'rgba(244, 114, 182, 0.1)'
-                      : 'rgba(139, 111, 255, 0.1)',
+                      : colors.primaryAlpha(0.1),
                   }}>
                     <Trophy
                       size={15}
-                      color={draw.draw_type === 'big' ? '#f472b6' : '#8B6FFF'}
+                      color={draw.draw_type === 'big' ? '#f472b6' : colors.primary}
                     />
                   </div>
                   <div>
@@ -584,8 +585,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   oddsCard: {
     marginTop: 12,
-    background: 'linear-gradient(135deg, rgba(26, 26, 34, 1), rgba(139, 111, 255, 0.03))',
-    border: '1px solid rgba(139, 111, 255, 0.12)',
+    background: `linear-gradient(135deg, rgba(26, 26, 34, 1), ${colors.primaryAlpha(0.03)})`,
+    border: `1px solid ${colors.primaryAlpha(0.12)}`,
     borderRadius: 16,
     padding: 22,
   },
@@ -599,7 +600,7 @@ const styles: Record<string, React.CSSProperties> = {
     width: 36,
     height: 36,
     borderRadius: 10,
-    background: 'rgba(139, 111, 255, 0.1)',
+    background: colors.primaryAlpha(0.1),
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -634,7 +635,7 @@ const styles: Record<string, React.CSSProperties> = {
   oddsPercent: {
     fontSize: 26,
     fontWeight: 800,
-    color: '#8B6FFF',
+    color: colors.primary,
     letterSpacing: '-0.02em',
     lineHeight: 1.2,
   },
@@ -661,7 +662,7 @@ const styles: Record<string, React.CSSProperties> = {
   oddsBarFill: {
     height: '100%',
     borderRadius: 2,
-    background: 'linear-gradient(90deg, #8B6FFF, #38bdf8)',
+    background: `linear-gradient(90deg, ${colors.primary}, #38bdf8)`,
     transition: 'width 0.5s ease',
     minWidth: 2,
   },

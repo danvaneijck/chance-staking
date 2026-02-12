@@ -3,12 +3,13 @@ import {
   Shield, CheckCircle, FileCheck, Layers, ChevronDown,
   AlertTriangle, Info
 } from 'lucide-react'
+import { colors } from '../theme'
 
 // ── Severity styling ──
 const severityColors: Record<string, { bg: string; text: string }> = {
   critical: { bg: 'rgba(239, 68, 68, 0.12)', text: '#ef4444' },
   high: { bg: 'rgba(245, 158, 11, 0.12)', text: '#f59e0b' },
-  medium: { bg: 'rgba(139, 111, 255, 0.12)', text: '#8B6FFF' },
+  medium: { bg: colors.primaryAlpha(0.12), text: colors.primary },
   low: { bg: 'rgba(56, 189, 248, 0.12)', text: '#38bdf8' },
   informational: { bg: 'rgba(142, 142, 160, 0.12)', text: '#8E8EA0' },
 }
@@ -331,7 +332,7 @@ export default function AuditPage() {
               </div>
             </div>
             <div style={styles.statCard}>
-              <Layers size={16} color="#8B6FFF" />
+              <Layers size={16} color={colors.primary} />
               <div>
                 <div style={styles.statValue}>2</div>
                 <div style={styles.statLabel}>Audit Rounds</div>
@@ -545,7 +546,7 @@ const styles: Record<string, React.CSSProperties> = {
   // Hero
   hero: {
     padding: '56px 0 0',
-    background: 'linear-gradient(180deg, rgba(139, 111, 255, 0.04) 0%, transparent 100%)',
+    background: `linear-gradient(180deg, ${colors.primaryAlpha(0.04)} 0%, transparent 100%)`,
   },
   heroContainer: {
     maxWidth: 720,
@@ -631,7 +632,7 @@ const styles: Record<string, React.CSSProperties> = {
   processRound: {
     fontSize: 11,
     fontWeight: 700,
-    color: '#8B6FFF',
+    color: colors.primary,
     textTransform: 'uppercase' as const,
     letterSpacing: '0.08em',
     marginBottom: 8,
@@ -848,8 +849,8 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: 'center',
     padding: '12px 28px',
     borderRadius: 10,
-    background: 'linear-gradient(135deg, #8B6FFF, #6B4FD6)',
-    color: '#FFFFFF',
+    background: colors.primaryGradient,
+    color: '#020202',
     fontSize: 14,
     fontWeight: 600,
     textDecoration: 'none',

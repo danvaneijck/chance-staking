@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useRpcStore, useCurrentRest, useCurrentGrpc } from '../store/rpcStore'
+import { colors } from '../theme'
 
 interface BlockInfo {
     height: number
@@ -167,7 +168,7 @@ const styles: Record<string, React.CSSProperties> = {
         width: '100%',
     },
     height: {
-        color: '#8B6FFF',
+        color: colors.primary,
         fontWeight: 600,
     },
     age: {

@@ -4,6 +4,7 @@ import {
   Hash, Dice1, Trophy, Clock, Loader,
 } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { colors } from '../theme'
 import * as contractsService from '../services/contracts'
 import type { Draw } from '../services/contracts'
 import { formatInj } from '../utils/formatNumber'
@@ -75,7 +76,7 @@ export default function DrawDetail({ drawId }: { drawId: number }) {
 
         {loading && (
           <div style={styles.loadingState}>
-            <Loader size={24} style={{ animation: 'spin 1s linear infinite' }} color="#8B6FFF" />
+            <Loader size={24} style={{ animation: 'spin 1s linear infinite' }} color={colors.primary} />
             <span>Loading draw #{drawId}...</span>
           </div>
         )}
@@ -93,8 +94,8 @@ export default function DrawDetail({ drawId }: { drawId: number }) {
                   ...styles.typeBadge,
                   background: draw.draw_type === 'big'
                     ? 'rgba(244, 114, 182, 0.12)'
-                    : 'rgba(158, 127, 255, 0.12)',
-                  color: draw.draw_type === 'big' ? '#f472b6' : '#8B6FFF',
+                    : colors.primaryAlpha(0.12),
+                  color: draw.draw_type === 'big' ? '#f472b6' : colors.primary,
                 }}>
                   {draw.draw_type === 'big' ? 'Big Jackpot' : 'Regular Draw'}
                 </div>
@@ -139,7 +140,7 @@ export default function DrawDetail({ drawId }: { drawId: number }) {
             {/* Verification Section */}
             <div style={styles.verifySection}>
               <div style={styles.verifySectionHeader}>
-                <Shield size={18} color="#8B6FFF" />
+                <Shield size={18} color={colors.primary} />
                 <h2 style={styles.verifySectionTitle}>Randomness Verification</h2>
               </div>
               <p style={styles.verifyDescription}>
@@ -436,8 +437,8 @@ const styles: Record<string, React.CSSProperties> = {
     width: 28,
     height: 28,
     borderRadius: '50%',
-    background: 'rgba(158, 127, 255, 0.12)',
-    color: '#8B6FFF',
+    background: colors.primaryAlpha(0.12),
+    color: colors.primary,
     fontSize: 13,
     fontWeight: 700,
     display: 'flex',
@@ -476,7 +477,7 @@ const styles: Record<string, React.CSSProperties> = {
   hexValue: {
     fontSize: 13,
     fontFamily: "'JetBrains Mono', monospace",
-    color: '#8B6FFF',
+    color: colors.primary,
     flex: 1,
     wordBreak: 'break-all' as const,
   },

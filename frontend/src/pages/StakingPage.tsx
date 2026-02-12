@@ -5,6 +5,7 @@ import { formatNumber } from '../utils/formatNumber'
 import StakingPanel from '../components/StakingPanel'
 import PortfolioSection from '../components/PortfolioSection'
 import EpochCountdown from '../components/EpochCountdown'
+import { colors } from '../theme'
 
 export default function StakingPage() {
   const exchangeRate = useStore((s) => s.exchangeRate)
@@ -34,7 +35,7 @@ export default function StakingPage() {
               </div>
             </div>
             <div style={styles.statCard}>
-              <Layers size={16} color="#8B6FFF" />
+              <Layers size={16} color={colors.primary} />
               <div>
                 <div style={styles.statValue}>
                   {formatNumber(tvl, 1)} INJ
@@ -64,7 +65,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   hero: {
     padding: '48px 0 0',
-    background: 'linear-gradient(180deg, rgba(139, 111, 255, 0.04) 0%, transparent 100%)',
+    background: `linear-gradient(180deg, ${colors.primaryAlpha(0.04)} 0%, transparent 100%)`,
   },
   heroContainer: {
     maxWidth: 1280,

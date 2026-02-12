@@ -155,11 +155,19 @@ pub fn execute(
             execute::update_validators(deps, env, info, add, remove)
         }
         ExecuteMsg::SyncDelegations {} => execute::sync_delegations(deps, env, info),
+        ExecuteMsg::RedelegateStake {
+            src_validator,
+            dst_validator,
+            amount,
+        } => execute::redelegate_stake(deps, env, info, src_validator, dst_validator, amount),
+        ExecuteMsg::RebalanceStake { validator_weights } => {
+            execute::rebalance_stake(deps, env, info, validator_weights)
+        }
     }
 }
 
 #[entry_point]
-pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
+pub fn query(deps: Deps, env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {
         QueryMsg::Config {} => query::query_config(deps),
         QueryMsg::EpochState {} => query::query_epoch_state(deps),
@@ -170,6 +178,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             limit,
         } => query::query_unstake_requests(deps, address, start_after, limit),
         QueryMsg::StakerInfo { address } => query::query_staker_info(deps, address),
+        QueryMsg::ValidatorDelegations {} => query::query_validator_delegations(deps, env),
     }
 }
 
@@ -901,5 +910,399 @@ mod tests {
         let user1 = deps.api.addr_make("user1");
         let info = message_info(&user1, &coins(5_000_000, "inj"));
         execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
+    }
+
+    #[test]
+    fn test_redelegate_stake() {
+        use cosmwasm_std::FullDelegation;
+
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let env = mock_env();
+
+        // Mock delegation of 1000 INJ to first validator
+        let delegation = FullDelegation::create(
+            env.contract.address.clone(),
+            "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+            Coin::new(1_000_000u128, "inj"),
+            Coin::new(1_000_000u128, "inj"),
+            vec![],
+        );
+        deps.querier.staking.update("inj", &[], &[delegation]);
+
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
+        let res = execute(
+            deps.as_mut(),
+            env,
+            info,
+            ExecuteMsg::RedelegateStake {
+                src_validator: "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+                dst_validator: "injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+                amount: Uint128::new(500_000),
+            },
+        )
+        .unwrap();
+
+        // Should have 1 redelegate message
+        assert_eq!(res.messages.len(), 1);
+        assert!(res.events.iter().any(|e| e.ty == "chance_redelegate_stake"));
+    }
+
+    #[test]
+    fn test_redelegate_stake_unauthorized() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let random = deps.api.addr_make("random");
+        let info = message_info(&random, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::RedelegateStake {
+                src_validator: "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+                dst_validator: "injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+                amount: Uint128::new(500_000),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::Unauthorized { .. }));
+    }
+
+    #[test]
+    fn test_redelegate_stake_validator_not_in_set() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::RedelegateStake {
+                src_validator: "injvaloper1unknownvalidatoraddressxxxxxxxxxx".to_string(),
+                dst_validator: "injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+                amount: Uint128::new(500_000),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::ValidatorNotInSet { .. }));
+    }
+
+    #[test]
+    fn test_redelegate_stake_same_validator() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::RedelegateStake {
+                src_validator: "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+                dst_validator: "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+                amount: Uint128::new(500_000),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::SameValidator));
+    }
+
+    #[test]
+    fn test_redelegate_stake_exceeds_delegation() {
+        use cosmwasm_std::FullDelegation;
+
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let env = mock_env();
+
+        // Mock delegation of only 100 INJ
+        let delegation = FullDelegation::create(
+            env.contract.address.clone(),
+            "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+            Coin::new(100u128, "inj"),
+            Coin::new(100u128, "inj"),
+            vec![],
+        );
+        deps.querier.staking.update("inj", &[], &[delegation]);
+
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
+        let err = execute(
+            deps.as_mut(),
+            env,
+            info,
+            ExecuteMsg::RedelegateStake {
+                src_validator: "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+                dst_validator: "injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+                amount: Uint128::new(500_000),
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            ContractError::RedelegationExceedsDelegation { .. }
+        ));
+    }
+
+    #[test]
+    fn test_rebalance_stake() {
+        use crate::msg::ValidatorWeight;
+        use cosmwasm_std::FullDelegation;
+
+        let mut deps = mock_dependencies();
+
+        // Set up with 3 validators
+        let mut msg = default_instantiate_msg();
+        msg.validators = vec![
+            "injvaloper1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            "injvaloper1bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+            "injvaloper1ccccccccccccccccccccccccccccccccccccc".to_string(),
+        ];
+        let admin = deps.api.addr_make("admin");
+        let info = message_info(&admin, &[]);
+        instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let env = mock_env();
+
+        // Mock uneven delegations: 600, 300, 100 = 1000 total
+        let del_a = FullDelegation::create(
+            env.contract.address.clone(),
+            "injvaloper1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+            Coin::new(600u128, "inj"),
+            Coin::new(600u128, "inj"),
+            vec![],
+        );
+        let del_b = FullDelegation::create(
+            env.contract.address.clone(),
+            "injvaloper1bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+            Coin::new(300u128, "inj"),
+            Coin::new(300u128, "inj"),
+            vec![],
+        );
+        let del_c = FullDelegation::create(
+            env.contract.address.clone(),
+            "injvaloper1ccccccccccccccccccccccccccccccccccccc".to_string(),
+            Coin::new(100u128, "inj"),
+            Coin::new(100u128, "inj"),
+            vec![],
+        );
+        deps.querier
+            .staking
+            .update("inj", &[], &[del_a, del_b, del_c]);
+
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
+        let res = execute(
+            deps.as_mut(),
+            env,
+            info,
+            ExecuteMsg::RebalanceStake {
+                validator_weights: vec![
+                    ValidatorWeight {
+                        validator: "injvaloper1aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_string(),
+                        weight: 1,
+                    },
+                    ValidatorWeight {
+                        validator: "injvaloper1bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_string(),
+                        weight: 1,
+                    },
+                    ValidatorWeight {
+                        validator: "injvaloper1ccccccccccccccccccccccccccccccccccccc".to_string(),
+                        weight: 2,
+                    },
+                ],
+            },
+        )
+        .unwrap();
+
+        // Targets: A=250, B=250, C=500
+        // A sends 350 (over by 350), B sends 50 (over by 50), C receives 400 (under by 400)
+        // Expected: A->C: 350, B->C: 50
+        assert_eq!(res.messages.len(), 2);
+        assert!(res.events.iter().any(|e| e.ty == "chance_rebalance_stake"));
+    }
+
+    #[test]
+    fn test_rebalance_stake_unauthorized() {
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let random = deps.api.addr_make("random");
+        let info = message_info(&random, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::RebalanceStake {
+                validator_weights: vec![],
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::Unauthorized { .. }));
+    }
+
+    #[test]
+    fn test_rebalance_stake_invalid_weights() {
+        use crate::msg::ValidatorWeight;
+
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let operator = deps.api.addr_make("operator");
+
+        // Wrong number of weights (2 validators in config, providing 1)
+        let info = message_info(&operator, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::RebalanceStake {
+                validator_weights: vec![ValidatorWeight {
+                    validator: "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+                    weight: 1,
+                }],
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::InvalidValidatorWeights { .. }));
+
+        // Zero weight
+        let info = message_info(&operator, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::RebalanceStake {
+                validator_weights: vec![
+                    ValidatorWeight {
+                        validator: "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+                        weight: 0,
+                    },
+                    ValidatorWeight {
+                        validator: "injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+                        weight: 1,
+                    },
+                ],
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::InvalidValidatorWeights { .. }));
+
+        // Duplicate validator
+        let info = message_info(&operator, &[]);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::RebalanceStake {
+                validator_weights: vec![
+                    ValidatorWeight {
+                        validator: "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+                        weight: 1,
+                    },
+                    ValidatorWeight {
+                        validator: "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+                        weight: 1,
+                    },
+                ],
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, ContractError::InvalidValidatorWeights { .. }));
+    }
+
+    #[test]
+    fn test_rebalance_stake_already_balanced() {
+        use crate::msg::ValidatorWeight;
+        use cosmwasm_std::FullDelegation;
+
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let env = mock_env();
+
+        // Mock equal delegations: 500, 500
+        let del_a = FullDelegation::create(
+            env.contract.address.clone(),
+            "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+            Coin::new(500u128, "inj"),
+            Coin::new(500u128, "inj"),
+            vec![],
+        );
+        let del_b = FullDelegation::create(
+            env.contract.address.clone(),
+            "injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+            Coin::new(500u128, "inj"),
+            Coin::new(500u128, "inj"),
+            vec![],
+        );
+        deps.querier.staking.update("inj", &[], &[del_a, del_b]);
+
+        let operator = deps.api.addr_make("operator");
+        let info = message_info(&operator, &[]);
+        let res = execute(
+            deps.as_mut(),
+            env,
+            info,
+            ExecuteMsg::RebalanceStake {
+                validator_weights: vec![
+                    ValidatorWeight {
+                        validator: "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+                        weight: 1,
+                    },
+                    ValidatorWeight {
+                        validator: "injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+                        weight: 1,
+                    },
+                ],
+            },
+        )
+        .unwrap();
+
+        // Already balanced — no redelegation messages
+        assert_eq!(res.messages.len(), 0);
+    }
+
+    #[test]
+    fn test_query_validator_delegations() {
+        use crate::msg::ValidatorDelegationsResponse;
+        use cosmwasm_std::{from_json, FullDelegation};
+
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let env = mock_env();
+
+        // Mock delegations
+        let del_a = FullDelegation::create(
+            env.contract.address.clone(),
+            "injvaloper1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqj9".to_string(),
+            Coin::new(700_000u128, "inj"),
+            Coin::new(700_000u128, "inj"),
+            vec![],
+        );
+        let del_b = FullDelegation::create(
+            env.contract.address.clone(),
+            "injvaloper1xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx".to_string(),
+            Coin::new(300_000u128, "inj"),
+            Coin::new(300_000u128, "inj"),
+            vec![],
+        );
+        deps.querier.staking.update("inj", &[], &[del_a, del_b]);
+
+        let res = query(deps.as_ref(), env, QueryMsg::ValidatorDelegations {}).unwrap();
+        let delegations: ValidatorDelegationsResponse = from_json(res).unwrap();
+
+        assert_eq!(delegations.delegations.len(), 2);
+        assert_eq!(delegations.delegations[0].amount, Uint128::new(700_000));
+        assert_eq!(delegations.delegations[1].amount, Uint128::new(300_000));
+        assert_eq!(delegations.total_delegated, Uint128::new(1_000_000));
     }
 }

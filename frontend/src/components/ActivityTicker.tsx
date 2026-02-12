@@ -2,6 +2,7 @@ import React, { useMemo } from 'react'
 import { Trophy } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { formatInj } from '../utils/formatNumber'
+import { colors } from '../theme'
 
 function truncateAddr(addr: string): string {
   if (!addr) return ''
@@ -46,9 +47,9 @@ export default function ActivityTicker() {
                   ...styles.icon,
                   background: isBig
                     ? 'rgba(244, 114, 182, 0.15)'
-                    : 'rgba(139, 111, 255, 0.15)',
+                    : colors.primaryAlpha(0.15),
                 }}>
-                  <Trophy size={12} color={isBig ? '#f472b6' : '#8B6FFF'} />
+                  <Trophy size={12} color={isBig ? '#f472b6' : colors.primary} />
                 </div>
                 <span style={styles.address}>{truncateAddr(draw.winner!)}</span>
                 <span style={styles.won}>won</span>

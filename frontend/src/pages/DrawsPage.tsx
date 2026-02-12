@@ -3,6 +3,7 @@ import { Trophy, Sparkles } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { formatInj } from '../utils/formatNumber'
 import DrawsSection from '../components/DrawsSection'
+import { colors } from '../theme'
 
 export default function DrawsPage() {
   const regularPoolBalance = useStore((s) => s.regularPoolBalance)
@@ -23,10 +24,10 @@ export default function DrawsPage() {
           <div className="draws-page-stats" style={styles.statsRow}>
             <div style={styles.poolCard}>
               <div style={styles.poolHeader}>
-                <Trophy size={16} color="#8B6FFF" />
+                <Trophy size={16} color={colors.primary} />
                 <span style={styles.poolLabel}>Regular Pool</span>
               </div>
-              <div style={{ ...styles.poolValue, color: '#8B6FFF' }}>
+              <div style={{ ...styles.poolValue, color: colors.primary }}>
                 {formatInj(regularPoolBalance, 2)} INJ
               </div>
             </div>
@@ -65,7 +66,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   hero: {
     padding: '48px 0 0',
-    background: 'linear-gradient(180deg, rgba(139, 111, 255, 0.04) 0%, transparent 100%)',
+    background: `linear-gradient(180deg, ${colors.primaryAlpha(0.04)} 0%, transparent 100%)`,
   },
   heroContainer: {
     maxWidth: 1280,
