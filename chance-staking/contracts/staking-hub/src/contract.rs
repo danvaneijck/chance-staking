@@ -547,7 +547,8 @@ mod tests {
             mock_env(),
             info,
             ExecuteMsg::TakeSnapshot {
-                merkle_root: "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234".to_string(),
+                merkle_root: "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234"
+                    .to_string(),
                 total_weight: Uint128::from(1000u128),
                 num_holders: 5,
                 snapshot_uri: "ipfs://snapshot".to_string(),
@@ -557,7 +558,10 @@ mod tests {
 
         let epoch = EPOCH_STATE.load(deps.as_ref().storage).unwrap();
         assert!(epoch.snapshot_finalized);
-        assert_eq!(epoch.snapshot_merkle_root, Some("abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234".to_string()));
+        assert_eq!(
+            epoch.snapshot_merkle_root,
+            Some("abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234".to_string())
+        );
         assert_eq!(epoch.snapshot_total_weight, Uint128::from(1000u128));
         assert_eq!(epoch.snapshot_num_holders, 5);
 
@@ -577,7 +581,8 @@ mod tests {
             mock_env(),
             info.clone(),
             ExecuteMsg::TakeSnapshot {
-                merkle_root: "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234".to_string(),
+                merkle_root: "abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234"
+                    .to_string(),
                 total_weight: Uint128::from(1000u128),
                 num_holders: 5,
                 snapshot_uri: "ipfs://snapshot".to_string(),
@@ -591,7 +596,8 @@ mod tests {
             mock_env(),
             info,
             ExecuteMsg::TakeSnapshot {
-                merkle_root: "ef125678ef125678ef125678ef125678ef125678ef125678ef125678ef125678".to_string(),
+                merkle_root: "ef125678ef125678ef125678ef125678ef125678ef125678ef125678ef125678"
+                    .to_string(),
                 total_weight: Uint128::from(2000u128),
                 num_holders: 10,
                 snapshot_uri: "ipfs://snapshot2".to_string(),

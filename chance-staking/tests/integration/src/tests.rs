@@ -699,19 +699,19 @@ fn test_full_stake_and_draw_cycle() {
                         };
                         SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
                     }
-                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo { address }) => {
+                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo {
+                        address,
+                    }) => {
                         let info = chance_reward_distributor::msg::StakerInfoResponse {
                             address,
                             stake_epoch: Some(0),
                         };
                         SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
                     }
-                    _ => {
-                        SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
-                            error: "Unknown query".to_string(),
-                            request: Default::default(),
-                        })
-                    }
+                    _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+                        error: "Unknown query".to_string(),
+                        request: Default::default(),
+                    }),
                 }
             }
             _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
@@ -1978,7 +1978,11 @@ fn test_reveal_draw_accepts_eligible_winner() {
         },
     );
 
-    assert!(res.is_ok(), "Eligible winner should succeed, got: {:?}", res.unwrap_err());
+    assert!(
+        res.is_ok(),
+        "Eligible winner should succeed, got: {:?}",
+        res.unwrap_err()
+    );
 
     eprintln!("test_reveal_draw_accepts_eligible_winner passed");
 }
@@ -2017,36 +2021,32 @@ fn test_big_pool_draw_cycle() {
 
     let mut dist_deps = mock_dependencies();
     let beacon_binary = beacon_query_res.clone();
-    dist_deps.querier.update_wasm(move |query| {
-        match query {
-            WasmQuery::Smart { msg, .. } => {
-                let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
-                    from_json(msg);
-                match parsed {
-                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
-                        let config = chance_reward_distributor::msg::StakingHubConfigResponse {
-                            min_epochs_regular: 0,
-                            min_epochs_big: 0,
-                        };
-                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
-                    }
-                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo {
-                        address,
-                    }) => {
-                        let info = chance_reward_distributor::msg::StakerInfoResponse {
-                            address,
-                            stake_epoch: Some(0),
-                        };
-                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
-                    }
-                    _ => SystemResult::Ok(ContractResult::Ok(beacon_binary.clone())),
+    dist_deps.querier.update_wasm(move |query| match query {
+        WasmQuery::Smart { msg, .. } => {
+            let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                from_json(msg);
+            match parsed {
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                    let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                        min_epochs_regular: 0,
+                        min_epochs_big: 0,
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
                 }
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo { address }) => {
+                    let info = chance_reward_distributor::msg::StakerInfoResponse {
+                        address,
+                        stake_epoch: Some(0),
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                }
+                _ => SystemResult::Ok(ContractResult::Ok(beacon_binary.clone())),
             }
-            _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
-                error: "Only smart queries supported".to_string(),
-                request: Default::default(),
-            }),
         }
+        _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+            error: "Only smart queries supported".to_string(),
+            request: Default::default(),
+        }),
     });
 
     setup_distributor(&mut dist_deps);
@@ -2160,7 +2160,10 @@ fn test_big_pool_draw_cycle() {
         .unwrap(),
     )
     .unwrap();
-    assert_eq!(draw.status, chance_staking_common::types::DrawStatus::Revealed);
+    assert_eq!(
+        draw.status,
+        chance_staking_common::types::DrawStatus::Revealed
+    );
     assert_eq!(draw.draw_type, chance_staking_common::types::DrawType::Big);
     assert_eq!(draw.reward_amount, Uint128::from(200_000_000u128));
 
@@ -2380,36 +2383,32 @@ fn test_invalid_merkle_proof_rejected() {
 
     let mut dist_deps = mock_dependencies();
     let beacon_binary = beacon_query_res.clone();
-    dist_deps.querier.update_wasm(move |query| {
-        match query {
-            WasmQuery::Smart { msg, .. } => {
-                let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
-                    from_json(msg);
-                match parsed {
-                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
-                        let config = chance_reward_distributor::msg::StakingHubConfigResponse {
-                            min_epochs_regular: 0,
-                            min_epochs_big: 0,
-                        };
-                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
-                    }
-                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo {
-                        address,
-                    }) => {
-                        let info = chance_reward_distributor::msg::StakerInfoResponse {
-                            address,
-                            stake_epoch: Some(0),
-                        };
-                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
-                    }
-                    _ => SystemResult::Ok(ContractResult::Ok(beacon_binary.clone())),
+    dist_deps.querier.update_wasm(move |query| match query {
+        WasmQuery::Smart { msg, .. } => {
+            let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                from_json(msg);
+            match parsed {
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                    let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                        min_epochs_regular: 0,
+                        min_epochs_big: 0,
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
                 }
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo { address }) => {
+                    let info = chance_reward_distributor::msg::StakerInfoResponse {
+                        address,
+                        stake_epoch: Some(0),
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                }
+                _ => SystemResult::Ok(ContractResult::Ok(beacon_binary.clone())),
             }
-            _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
-                error: "Only smart queries supported".to_string(),
-                request: Default::default(),
-            }),
         }
+        _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+            error: "Only smart queries supported".to_string(),
+            request: Default::default(),
+        }),
     });
 
     setup_distributor(&mut dist_deps);
@@ -2483,7 +2482,11 @@ fn test_invalid_merkle_proof_rejected() {
     let (winner_addr, winner_start, winner_end) = if winning_ticket < 500 {
         (addr_a.clone(), Uint128::zero(), Uint128::from(500u128))
     } else {
-        (addr_b.clone(), Uint128::from(500u128), Uint128::from(1000u128))
+        (
+            addr_b.clone(),
+            Uint128::from(500u128),
+            Uint128::from(1000u128),
+        )
     };
 
     // Use a completely fake proof
@@ -2551,36 +2554,32 @@ fn test_winning_ticket_out_of_range_rejected() {
 
     let mut dist_deps = mock_dependencies();
     let beacon_binary = beacon_query_res.clone();
-    dist_deps.querier.update_wasm(move |query| {
-        match query {
-            WasmQuery::Smart { msg, .. } => {
-                let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
-                    from_json(msg);
-                match parsed {
-                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
-                        let config = chance_reward_distributor::msg::StakingHubConfigResponse {
-                            min_epochs_regular: 0,
-                            min_epochs_big: 0,
-                        };
-                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
-                    }
-                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo {
-                        address,
-                    }) => {
-                        let info = chance_reward_distributor::msg::StakerInfoResponse {
-                            address,
-                            stake_epoch: Some(0),
-                        };
-                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
-                    }
-                    _ => SystemResult::Ok(ContractResult::Ok(beacon_binary.clone())),
+    dist_deps.querier.update_wasm(move |query| match query {
+        WasmQuery::Smart { msg, .. } => {
+            let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                from_json(msg);
+            match parsed {
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                    let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                        min_epochs_regular: 0,
+                        min_epochs_big: 0,
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
                 }
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo { address }) => {
+                    let info = chance_reward_distributor::msg::StakerInfoResponse {
+                        address,
+                        stake_epoch: Some(0),
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                }
+                _ => SystemResult::Ok(ContractResult::Ok(beacon_binary.clone())),
             }
-            _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
-                error: "Only smart queries supported".to_string(),
-                request: Default::default(),
-            }),
         }
+        _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+            error: "Only smart queries supported".to_string(),
+            request: Default::default(),
+        }),
     });
 
     setup_distributor(&mut dist_deps);
@@ -2663,10 +2662,7 @@ fn test_winning_ticket_out_of_range_rejected() {
     // The winning ticket is unlikely to be in [999, 1000), so this should fail.
     // But if by chance it lands on 999, the merkle proof will fail instead
     // since the leaf hash uses [999, 1000) but the tree has [0, 1000).
-    assert!(
-        err.is_err(),
-        "Should reject wrong cumulative range"
-    );
+    assert!(err.is_err(), "Should reject wrong cumulative range");
     let err_str = format!("{:?}", err.unwrap_err());
     assert!(
         err_str.contains("WinningTicketOutOfRange") || err_str.contains("InvalidMerkleProof"),
@@ -2708,7 +2704,9 @@ fn test_beacon_not_found_during_reveal() {
                     }
                     _ => {
                         // Return None for beacon query (beacon not found)
-                        let none_beacon: Option<chance_reward_distributor::state::StoredBeaconResponse> = None;
+                        let none_beacon: Option<
+                            chance_reward_distributor::state::StoredBeaconResponse,
+                        > = None;
                         SystemResult::Ok(ContractResult::Ok(to_json_binary(&none_beacon).unwrap()))
                     }
                 }
@@ -3000,14 +2998,21 @@ fn test_zero_rewards_distribution() {
         .unwrap(),
     )
     .unwrap();
-    assert_eq!(epoch_state.current_epoch, 2, "Epoch should advance even with zero rewards");
+    assert_eq!(
+        epoch_state.current_epoch, 2,
+        "Epoch should advance even with zero rewards"
+    );
 
     // Verify no pool funding messages (all zero amounts skipped)
     // Messages would only be for non-zero amounts
-    let has_wasm_msgs = res.messages.iter().any(|m| {
-        matches!(m.msg, cosmwasm_std::CosmosMsg::Wasm(_))
-    });
-    assert!(!has_wasm_msgs, "Should not send wasm messages for zero-amount pool funding");
+    let has_wasm_msgs = res
+        .messages
+        .iter()
+        .any(|m| matches!(m.msg, cosmwasm_std::CosmosMsg::Wasm(_)));
+    assert!(
+        !has_wasm_msgs,
+        "Should not send wasm messages for zero-amount pool funding"
+    );
 
     // Exchange rate should remain the same (no base yield added)
     let rate: chance_staking_hub::msg::ExchangeRateResponse = from_json(
@@ -3019,7 +3024,11 @@ fn test_zero_rewards_distribution() {
         .unwrap(),
     )
     .unwrap();
-    assert_eq!(rate.rate, Decimal::one(), "Rate should stay at 1.0 with zero rewards");
+    assert_eq!(
+        rate.rate,
+        Decimal::one(),
+        "Rate should stay at 1.0 with zero rewards"
+    );
 
     eprintln!("test_zero_rewards_distribution passed");
 }
@@ -3107,7 +3116,10 @@ fn test_exchange_rate_rounding_no_value_extraction() {
     let user2_csinj = rate_before.total_csinj_supply - Uint128::from(100_000_000u128);
 
     let user2 = deps.api.addr_make("user2");
-    let info = message_info(&user2, &[Coin::new(user2_csinj.u128(), &config.csinj_denom)]);
+    let info = message_info(
+        &user2,
+        &[Coin::new(user2_csinj.u128(), &config.csinj_denom)],
+    );
     let res = chance_staking_hub::contract::execute(
         deps.as_mut(),
         mock_env(),
@@ -3117,7 +3129,11 @@ fn test_exchange_rate_rounding_no_value_extraction() {
     .unwrap();
 
     // Check inj_owed from the unstake event
-    let unstake_event = res.events.iter().find(|e| e.ty == "chance_unstake").unwrap();
+    let unstake_event = res
+        .events
+        .iter()
+        .find(|e| e.ty == "chance_unstake")
+        .unwrap();
     let inj_owed: u128 = unstake_event
         .attributes
         .iter()
@@ -3169,36 +3185,32 @@ fn test_concurrent_regular_and_big_draw() {
 
     let mut dist_deps = mock_dependencies();
     let beacon_binary = beacon_query_res.clone();
-    dist_deps.querier.update_wasm(move |query| {
-        match query {
-            WasmQuery::Smart { msg, .. } => {
-                let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
-                    from_json(msg);
-                match parsed {
-                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
-                        let config = chance_reward_distributor::msg::StakingHubConfigResponse {
-                            min_epochs_regular: 0,
-                            min_epochs_big: 0,
-                        };
-                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
-                    }
-                    Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo {
-                        address,
-                    }) => {
-                        let info = chance_reward_distributor::msg::StakerInfoResponse {
-                            address,
-                            stake_epoch: Some(0),
-                        };
-                        SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
-                    }
-                    _ => SystemResult::Ok(ContractResult::Ok(beacon_binary.clone())),
+    dist_deps.querier.update_wasm(move |query| match query {
+        WasmQuery::Smart { msg, .. } => {
+            let parsed: Result<chance_reward_distributor::msg::StakingHubQueryMsg, _> =
+                from_json(msg);
+            match parsed {
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::Config {}) => {
+                    let config = chance_reward_distributor::msg::StakingHubConfigResponse {
+                        min_epochs_regular: 0,
+                        min_epochs_big: 0,
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
                 }
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo { address }) => {
+                    let info = chance_reward_distributor::msg::StakerInfoResponse {
+                        address,
+                        stake_epoch: Some(0),
+                    };
+                    SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+                }
+                _ => SystemResult::Ok(ContractResult::Ok(beacon_binary.clone())),
             }
-            _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
-                error: "Only smart queries supported".to_string(),
-                request: Default::default(),
-            }),
         }
+        _ => SystemResult::Err(cosmwasm_std::SystemError::InvalidRequest {
+            error: "Only smart queries supported".to_string(),
+            request: Default::default(),
+        }),
     });
 
     setup_distributor(&mut dist_deps);
@@ -3295,7 +3307,10 @@ fn test_concurrent_regular_and_big_draw() {
     assert_eq!(state.next_draw_id, 2);
 
     // Reveal both draws
-    for (draw_id, secret) in [(0u64, secret_regular.as_slice()), (1u64, secret_big.as_slice())] {
+    for (draw_id, secret) in [
+        (0u64, secret_regular.as_slice()),
+        (1u64, secret_big.as_slice()),
+    ] {
         let env = mock_env();
         dist_deps.querier.bank.update_balance(
             &env.contract.address,
@@ -3600,9 +3615,7 @@ fn setup_distributor_with_mocks(
                     };
                     SystemResult::Ok(ContractResult::Ok(to_json_binary(&config).unwrap()))
                 }
-                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo {
-                    address,
-                }) => {
+                Ok(chance_reward_distributor::msg::StakingHubQueryMsg::StakerInfo { address }) => {
                     let info = chance_reward_distributor::msg::StakerInfoResponse {
                         address,
                         stake_epoch,
@@ -3862,10 +3875,7 @@ fn test_staking_hub_unstake_error_paths() {
         .unwrap();
 
     let user = deps.api.addr_make("user");
-    let info = message_info(
-        &user,
-        &[Coin::new(50_000_000u128, &config.csinj_denom)],
-    );
+    let info = message_info(&user, &[Coin::new(50_000_000u128, &config.csinj_denom)]);
     let err = chance_staking_hub::contract::execute(
         deps.as_mut(),
         mock_env(),
@@ -5092,10 +5102,7 @@ fn test_staking_hub_staker_info_and_unstake_pagination() {
     // 3. Create 5 unstake requests for pagination testing
     for _ in 0..5 {
         let user = deps.api.addr_make("user");
-        let info = message_info(
-            &user,
-            &[Coin::new(10_000_000u128, &config.csinj_denom)],
-        );
+        let info = message_info(&user, &[Coin::new(10_000_000u128, &config.csinj_denom)]);
         chance_staking_hub::contract::execute(
             deps.as_mut(),
             mock_env(),
