@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useStore } from './store/useStore'
 import Header from './components/Header'
 import HeroSection from './components/HeroSection'
@@ -11,6 +11,54 @@ import HowItWorks from './components/HowItWorks'
 import Footer from './components/Footer'
 import ToastContainer from './components/Toast'
 import Confetti from './components/Confetti'
+import StakingPage from './pages/StakingPage'
+import DrawsPage from './pages/DrawsPage'
+import HowItWorksPage from './pages/HowItWorksPage'
+import ValidatorsPage from './pages/ValidatorsPage'
+import DocsPage from './pages/DocsPage'
+import ContractsPage from './pages/ContractsPage'
+import AuditPage from './pages/AuditPage'
+import TermsPage from './pages/TermsPage'
+import PrivacyPage from './pages/PrivacyPage'
+
+// ── Router ──
+type Route =
+  | { page: 'home'; anchor?: string }
+  | { page: 'stake' }
+  | { page: 'draws' }
+  | { page: 'draw-detail'; drawId: number }
+  | { page: 'how-it-works' }
+  | { page: 'validators' }
+  | { page: 'docs' }
+  | { page: 'contracts' }
+  | { page: 'audit' }
+  | { page: 'terms' }
+  | { page: 'privacy' }
+
+function parseRoute(hash: string): Route {
+  const h = hash || ''
+  // Page routes (with leading slash)
+  if (h === '#/' || h === '' || h === '#') return { page: 'home' }
+  if (h === '#/stake') return { page: 'stake' }
+  if (h === '#/draws') return { page: 'draws' }
+  if (h === '#/how-it-works') return { page: 'how-it-works' }
+  if (h === '#/validators') return { page: 'validators' }
+  if (h === '#/docs') return { page: 'docs' }
+  if (h === '#/contracts') return { page: 'contracts' }
+  if (h === '#/audit') return { page: 'audit' }
+  if (h === '#/terms') return { page: 'terms' }
+  if (h === '#/privacy') return { page: 'privacy' }
+
+  // Draw detail: support #/draws/N and legacy #draw/N
+  const drawMatch = h.match(/^#\/?draws?\/(\d+)$/)
+  if (drawMatch) return { page: 'draw-detail', drawId: parseInt(drawMatch[1]) }
+
+  // Section anchors on home page (#stake, #draws, #how-it-works, #portfolio)
+  const anchorMatch = h.match(/^#([a-z-]+)$/)
+  if (anchorMatch) return { page: 'home', anchor: anchorMatch[1] }
+
+  return { page: 'home' }
+}
 
 function App() {
   const isConnected = useStore((s) => s.isConnected)
@@ -20,8 +68,31 @@ function App() {
   const fetchDraws = useStore((s) => s.fetchDraws)
   const fetchBalances = useStore((s) => s.fetchBalances)
   const fetchUserData = useStore((s) => s.fetchUserData)
-  const selectedDrawId = useStore((s) => s.selectedDrawId)
-  const selectDraw = useStore((s) => s.selectDraw)
+
+  const [route, setRoute] = useState<Route>(() => parseRoute(window.location.hash))
+  const prevPageRef = useRef(route.page)
+
+  // Listen for hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      setRoute(parseRoute(window.location.hash))
+    }
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [])
+
+  // Scroll to top when page changes; scroll to section anchor on home
+  useEffect(() => {
+    if (route.page !== prevPageRef.current) {
+      window.scrollTo(0, 0)
+      prevPageRef.current = route.page
+    }
+    if (route.page === 'home' && 'anchor' in route && route.anchor) {
+      setTimeout(() => {
+        document.getElementById(route.anchor!)?.scrollIntoView({ behavior: 'smooth' })
+      }, 50)
+    }
+  }, [route])
 
   // On mount: fetch global contract data + draws
   useEffect(() => {
@@ -57,45 +128,49 @@ function App() {
     return () => clearInterval(interval)
   }, [isConnected])
 
-  // Handle hash-based routing for draw detail pages
-  useEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash
-      const match = hash.match(/^#draw\/(\d+)$/)
-      if (match) {
-        selectDraw(parseInt(match[1]))
-      } else if (selectedDrawId !== null && !hash.startsWith('#draw/')) {
-        // Only clear if we're navigating away from a draw page
-        useStore.setState({ selectedDrawId: null })
-      }
+  const renderPage = () => {
+    switch (route.page) {
+      case 'stake':
+        return <StakingPage />
+      case 'draws':
+        return <DrawsPage />
+      case 'draw-detail':
+        return <DrawDetail drawId={route.drawId} />
+      case 'how-it-works':
+        return <HowItWorksPage />
+      case 'validators':
+        return <ValidatorsPage />
+      case 'docs':
+        return <DocsPage />
+      case 'contracts':
+        return <ContractsPage />
+      case 'audit':
+        return <AuditPage />
+      case 'terms':
+        return <TermsPage />
+      case 'privacy':
+        return <PrivacyPage />
+      case 'home':
+      default:
+        return (
+          <>
+            <HeroSection />
+            <StakingPanel />
+            <RewardsCalculator />
+            {isConnected && <PortfolioSection />}
+            <DrawsSection />
+            <HowItWorks />
+          </>
+        )
     }
-
-    handleHashChange() // Check on mount
-    window.addEventListener('hashchange', handleHashChange)
-    return () => window.removeEventListener('hashchange', handleHashChange)
-  }, [])
+  }
 
   return (
     <div style={{ minHeight: '100vh' }}>
       <Header />
       <ToastContainer />
       <Confetti />
-
-      {selectedDrawId !== null ? (
-        <main>
-          <DrawDetail drawId={selectedDrawId} />
-        </main>
-      ) : (
-        <main>
-          <HeroSection />
-          <StakingPanel />
-          <RewardsCalculator />
-          {isConnected && <PortfolioSection />}
-          <DrawsSection />
-          <HowItWorks />
-        </main>
-      )}
-
+      <main>{renderPage()}</main>
       <Footer />
     </div>
   )

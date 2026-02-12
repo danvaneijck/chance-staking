@@ -19,7 +19,11 @@ function timeAgo(timestampNanos: string): string {
   return `${Math.floor(diff / 86400)} days ago`
 }
 
-export default function DrawsSection() {
+interface DrawsSectionProps {
+  fullPage?: boolean
+}
+
+export default function DrawsSection({ fullPage = false }: DrawsSectionProps) {
   const recentDraws = useStore((s) => s.recentDraws)
   const regularPoolBalance = useStore((s) => s.regularPoolBalance)
   const bigPoolBalance = useStore((s) => s.bigPoolBalance)
@@ -92,7 +96,7 @@ export default function DrawsSection() {
             </div>
             <div style={styles.poolMeta}>
               <span style={styles.poolMetaItem}>
-                <Clock size={11} /> Monthly draws
+                <Clock size={11} /> Weekly draws
               </span>
               <span style={styles.poolMetaItem}>
                 <Users size={11} /> Weighted by balance
@@ -182,7 +186,10 @@ export default function DrawsSection() {
         )}
 
         {/* Revealed draws list - scrollable */}
-        <div style={styles.drawsListScrollable}>
+        <div style={{
+          ...styles.drawsListScrollable,
+          ...(fullPage ? { maxHeight: 'none', overflowY: 'visible' as const } : {}),
+        }}>
           {revealedDraws.length === 0 && committedDraws.length === 0 && (
             <div style={styles.emptyState}>
               No draws yet. Draws appear here once the first epoch completes.

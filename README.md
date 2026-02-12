@@ -137,7 +137,7 @@ Optimized `.wasm` files output to `chance-staking/artifacts/`.
 
 ```bash
 cd chance-staking
-cargo test                                     # all tests
+cargo test                                     # all 96 tests
 cargo test -p chance-drand-oracle              # oracle unit tests
 cargo test -p chance-staking-hub               # staking hub unit tests
 cargo test -p chance-reward-distributor        # distributor unit tests
@@ -239,10 +239,23 @@ Chain: `injective-888` (Injective Testnet)
 ## Key Concepts
 
 - **csINJ**: Liquid staking token minted via Token Factory. Exchange rate starts at 1.0 and increases as base yield accrues: `rate = total_inj_backing / total_csinj_supply`
-- **Epochs**: Time periods (configurable, default 24h) after which rewards are harvested and distributed
-- **Merkle Tree**: Sorted-pair hashing (`sha256(min(left,right) || max(left,right))`) for snapshot verification. Leaf: `sha256(address_bytes || cumulative_start_be_u128 || cumulative_end_be_u128)`
+- **Epochs**: Time periods (configurable, default 24h) after which rewards are harvested and distributed. Epoch duration is enforced on-chain. Users must be staked for `min_epochs_regular` / `min_epochs_big` epochs to be eligible for draws
+- **Merkle Tree**: Sorted-pair hashing with domain separation. Leaf: `sha256(0x00 || address_bytes || cumulative_start_be_u128 || cumulative_end_be_u128)`. Internal: `sha256(0x01 || min(left,right) || max(left,right))`
 - **Commit-Reveal**: Two-phase draw to prevent manipulation. Operator commits before randomness is known, reveals after the drand beacon is available
 - **Unstaking**: 21-day unbonding period (Injective native). Users call `unstake` then `claim_unstaked` after the lock expires
+- **Minimum Stake**: Configurable `min_stake_amount` per transaction (default 0 = no minimum). Re-staking resets the user's epoch eligibility timer
+- **Contract Migration**: All three contracts support on-chain migration via `MigrateMsg {}`
+
+## Security Audits
+
+Two security audits have been completed with all 24 findings remediated:
+
+- **Audit V1**: 17 findings (2 critical, 5 high, 5 medium, 5 low) — all fixed
+- **Audit V2**: 7 findings (3 medium, 3 low, 1 informational) — all fixed
+
+Key security improvements include: BPS sum validation, epoch duration enforcement, merkle domain separation, validator address validation, reveal deadline bounds, slashing detection (`sync_delegations`), snapshot overwrite prevention, and contract migration support.
+
+Full reports and fix tracking are in [`chance-staking/docs/`](chance-staking/docs/).
 
 ## License
 

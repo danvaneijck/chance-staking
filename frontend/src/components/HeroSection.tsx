@@ -41,7 +41,7 @@ export default function HeroSection() {
               Start Staking
             </button>
           </a>
-          <a href="#how-it-works" style={{ textDecoration: 'none' }}>
+          <a href="#/how-it-works" style={{ textDecoration: 'none' }}>
             <button className="hero-cta-secondary" style={styles.secondaryCta}>
               Learn How It Works
             </button>

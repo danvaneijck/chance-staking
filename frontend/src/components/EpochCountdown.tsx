@@ -2,7 +2,11 @@ import React, { useState, useEffect } from 'react'
 import { Timer } from 'lucide-react'
 import { useStore } from '../store/useStore'
 
-export default function EpochCountdown() {
+interface EpochCountdownProps {
+  compact?: boolean
+}
+
+export default function EpochCountdown({ compact = false }: EpochCountdownProps) {
   const currentEpoch = useStore((s) => s.currentEpoch)
   const epochStartTime = useStore((s) => s.epochStartTime)
   const epochDurationSeconds = useStore((s) => s.epochDurationSeconds)
@@ -38,8 +42,21 @@ export default function EpochCountdown() {
   const pad = (n: number) => String(n).padStart(2, '0')
   const isAlmostDone = progress > 90
 
+  if (compact) {
+    return (
+      <div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#F0F0F5', fontVariantNumeric: 'tabular-nums' as const }}>
+          Epoch {currentEpoch}
+        </div>
+        <div style={{ fontSize: 11, color: '#8E8EA0', marginTop: 1 }}>
+          {remaining.d > 0 && `${remaining.d}d `}{pad(remaining.h)}h {pad(remaining.m)}m
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div style={styles.wrapper}>
+    <div className="epoch-countdown-wrapper" style={styles.wrapper}>
       <div style={styles.header}>
         <div style={styles.label}>
           <div style={{
@@ -60,22 +77,22 @@ export default function EpochCountdown() {
       <div style={styles.countdown}>
         {remaining.d > 0 && (
           <div style={styles.unit}>
-            <span style={styles.unitValue}>{remaining.d}</span>
+            <span className="epoch-unit-value" style={styles.unitValue}>{remaining.d}</span>
             <span style={styles.unitLabel}>d</span>
           </div>
         )}
         <div style={styles.unit}>
-          <span style={styles.unitValue}>{pad(remaining.h)}</span>
+          <span className="epoch-unit-value" style={styles.unitValue}>{pad(remaining.h)}</span>
           <span style={styles.unitLabel}>h</span>
         </div>
         <div style={styles.separator}>:</div>
         <div style={styles.unit}>
-          <span style={styles.unitValue}>{pad(remaining.m)}</span>
+          <span className="epoch-unit-value" style={styles.unitValue}>{pad(remaining.m)}</span>
           <span style={styles.unitLabel}>m</span>
         </div>
         <div style={styles.separator}>:</div>
         <div style={styles.unit}>
-          <span style={styles.unitValue}>{pad(remaining.s)}</span>
+          <span className="epoch-unit-value" style={styles.unitValue}>{pad(remaining.s)}</span>
           <span style={styles.unitLabel}>s</span>
         </div>
       </div>

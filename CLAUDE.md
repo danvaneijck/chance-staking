@@ -22,7 +22,7 @@ chance-staking/
 
 ```bash
 cd chance-staking
-cargo test                                    # all 51 tests
+cargo test                                    # all 96 tests
 cargo test -p chance-drand-oracle             # oracle unit tests
 cargo test -p chance-staking-hub              # staking hub unit tests
 cargo test -p chance-reward-distributor       # distributor unit tests
@@ -66,6 +66,9 @@ Stores and verifies drand quicknet beacons (BLS signatures). Used by reward-dist
 
 // Update operator list (admin only)
 { "update_operators": { "add": ["inj1..."], "remove": [] } }
+
+// Update admin (admin only)
+{ "update_admin": { "new_admin": "inj1..." } }
 ```
 
 #### Query
@@ -117,6 +120,7 @@ Manages INJ staking, csINJ (liquid staking token) minting/burning, epoch advance
 ```jsonc
 // Stake INJ to receive csINJ (send INJ in funds)
 // csINJ_minted = inj_amount / exchange_rate
+// Rejects if amount < min_stake_amount. Resets user's epoch eligibility timer.
 { "stake": {} }
 // funds: [{ "denom": "inj", "amount": "1000000000000000000" }]
 
@@ -133,8 +137,9 @@ Manages INJ staking, csINJ (liquid staking token) minting/burning, epoch advance
 { "claim_rewards": {} }
 
 // Step 2: Distribute claimed rewards and advance epoch (operator only)
+// Enforces epoch_duration_seconds has elapsed since epoch start.
 // Reads contract INJ balance, subtracts reserved unstake amounts,
-// splits surplus: base_yield_bps -> backing, protocol_fee_bps -> treasury,
+// splits surplus: base_yield_bps -> delegated to validators, protocol_fee_bps -> treasury,
 //                 regular_pool_bps -> regular pool, big_pool_bps -> big pool
 { "distribute_rewards": {} }
 
@@ -148,15 +153,27 @@ Manages INJ staking, csINJ (liquid staking token) minting/burning, epoch advance
 } }
 
 // Update config (admin only)
+// Note: BPS fields must sum to 10000 (regular + big + base_yield + protocol_fee)
 { "update_config": {
     "admin": "inj1...",           // optional
     "operator": "inj1...",        // optional
-    "protocol_fee_bps": 500       // optional
+    "protocol_fee_bps": 500,      // optional
+    "base_yield_bps": 500,        // optional
+    "regular_pool_bps": 7000,     // optional
+    "big_pool_bps": 2000,         // optional
+    "min_epochs_regular": 1,      // optional, min epochs staked for regular draw eligibility
+    "min_epochs_big": 4,          // optional, min epochs staked for big draw eligibility
+    "min_stake_amount": "1000"    // optional, Uint128 (0 = no minimum)
 } }
 
 // Update validator set (admin only)
 // Removed validators are automatically redelegated to remaining validators
+// Validator addresses must start with "injvaloper"
 { "update_validators": { "add": ["injvaloper1..."], "remove": [] } }
+
+// Sync backing with actual validator delegations after slashing (operator only)
+// Updates TOTAL_INJ_BACKING, EPOCH_STATE.total_staked, and exchange rate
+{ "sync_delegations": {} }
 ```
 
 #### Query
@@ -177,7 +194,10 @@ Manages INJ staking, csINJ (liquid staking token) minting/burning, epoch advance
 //   "treasury": "inj1...",
 //   "base_yield_bps": 500,
 //   "regular_pool_bps": 7000,
-//   "big_pool_bps": 2000
+//   "big_pool_bps": 2000,
+//   "min_epochs_regular": 1,
+//   "min_epochs_big": 4,
+//   "min_stake_amount": "1000"
 // }
 
 // Get current epoch state
@@ -215,6 +235,14 @@ Manages INJ staking, csINJ (liquid staking token) minting/burning, epoch advance
 //     "claimed": false
 //   }
 // }]
+
+// Get staker eligibility info
+{ "staker_info": { "address": "inj1..." } }
+// Returns: StakerInfoResponse
+// {
+//   "address": "inj1...",
+//   "stake_epoch": 5 | null    // epoch of most recent stake, null if never staked
+// }
 ```
 
 ---
@@ -273,10 +301,11 @@ Manages prize draw lifecycle: commit-reveal with drand randomness, merkle-proof 
 { "expire_draw": { "draw_id": 0 } }
 
 // Update config (admin only)
+// reveal_deadline_seconds must be between 300 (5 min) and 86400 (24 hours)
 { "update_config": {
     "operator": "inj1...",               // optional
     "staking_hub": "inj1...",            // optional
-    "reveal_deadline_seconds": 3600,     // optional
+    "reveal_deadline_seconds": 3600,     // optional (300-86400)
     "epochs_between_regular": 1,         // optional
     "epochs_between_big": 7              // optional
 } }
@@ -399,13 +428,15 @@ interface SnapshotEntry {
 
 ## Merkle Tree
 
-The merkle tree uses **sorted-pair hashing** (smaller hash first when combining siblings).
+The merkle tree uses **sorted-pair hashing** (smaller hash first when combining siblings) with **domain separation** prefixes to prevent second pre-image attacks.
 
-**Leaf hash**: `sha256(address_bytes || cumulative_start_be_u128 || cumulative_end_be_u128)`
+**Leaf hash**: `sha256(0x00 || address_bytes || cumulative_start_be_u128 || cumulative_end_be_u128)`
+- `0x00`: leaf domain separator prefix byte
 - `address_bytes`: raw UTF-8 bytes of the bech32 address string
 - `cumulative_start` / `cumulative_end`: big-endian 16-byte u128
 
-**Internal nodes**: `sha256(min(left, right) || max(left, right))`
+**Internal nodes**: `sha256(0x01 || min(left, right) || max(left, right))`
+- `0x01`: internal node domain separator prefix byte
 
 The frontend needs to:
 1. Build the tree from the snapshot entries
@@ -423,6 +454,7 @@ The frontend needs to:
 | Recent draws | reward-distributor | `draw_history` |
 | Specific draw result | reward-distributor | `draw` |
 | User's win history | reward-distributor | `user_wins` / `user_win_details` |
+| Staker eligibility info | staking-hub | `staker_info` |
 | Latest drand round | drand-oracle | `latest_round` |
 
 ## Key Frontend Actions
@@ -432,6 +464,25 @@ The frontend needs to:
 | Stake INJ | staking-hub | `stake` | INJ amount |
 | Unstake csINJ | staking-hub | `unstake` | csINJ amount |
 | Claim unstaked | staking-hub | `claim_unstaked` | none |
+
+---
+
+## Validation Rules (Post-Audit)
+
+- **BPS sum**: `regular_pool_bps + big_pool_bps + base_yield_bps + protocol_fee_bps` must equal 10000. Enforced at instantiation and `update_config`.
+- **Validator addresses**: Must start with `injvaloper` and be reasonable length. Enforced at instantiation and `update_validators`.
+- **Merkle root**: Must be exactly 64 hex characters (32 bytes). Validated in `take_snapshot`.
+- **Reveal deadline**: Must be between 300 seconds (5 min) and 86400 seconds (24 hours). Enforced at instantiation and `update_config`.
+- **Epoch duration**: `distribute_rewards` enforces that `epoch_duration_seconds` has elapsed since epoch start.
+- **Snapshot overwrite**: Cannot overwrite a snapshot for an epoch that already has one.
+- **Zero weight**: Snapshots with `total_weight = 0` are rejected at `commit_draw`.
+- **Balance check**: `reveal_draw` verifies contract has sufficient balance before payout.
+- **Min stake**: Stake amount must be >= `min_stake_amount` (configurable, 0 = no minimum).
+- **Draw epoch**: `commit_draw` validates the epoch matches the latest snapshot epoch.
+
+## Contract Migration
+
+All three contracts support `migrate()` via `MigrateMsg {}` (empty message). Uses cw2 for contract name/version validation.
 
 ---
 
@@ -460,3 +511,20 @@ donates to all current stakers and is not a security risk.
 - Direct transfers are treated as additional staking rewards
 - The INJ is split according to BPS configuration (pools, treasury, base yield)
 - This is by design and allows for voluntary contributions to the reward pool
+
+### Re-staking Resets Eligibility (V2-I-01)
+
+Any new stake resets the user's epoch eligibility timer (`USER_STAKE_EPOCH`).
+This means adding more INJ restarts the `min_epochs_regular` / `min_epochs_big`
+countdown for draw eligibility.
+
+**Implications:**
+
+- Frontend should warn users that additional stakes reset their eligibility timer
+- Users who want to remain eligible should avoid staking more until after a draw
+
+### No Minimum Stake Enforced by Default (V2-L-03)
+
+The `min_stake_amount` config defaults to 0 (no minimum). Dust stakes are allowed
+since winning probability is proportional to stake weight, making the expected
+value for tiny stakes negligible. Operators can set a minimum via `update_config`.

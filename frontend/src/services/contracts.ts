@@ -4,6 +4,7 @@ import {
     ChainGrpcStakingApi,
     ChainGrpcMintApi,
     MsgExecuteContractCompat,
+    IndexerGrpcExplorerApi,
 } from "@injectivelabs/sdk-ts";
 import { CONTRACTS, ENDPOINTS, INJ_DENOM, getCsinjDenom } from "../config";
 
@@ -12,6 +13,7 @@ const wasmApi = new ChainGrpcWasmApi(ENDPOINTS.grpc);
 const bankApi = new ChainGrpcBankApi(ENDPOINTS.grpc);
 const stakingApi = new ChainGrpcStakingApi(ENDPOINTS.grpc);
 const mintApi = new ChainGrpcMintApi(ENDPOINTS.grpc);
+const explorerApi = new IndexerGrpcExplorerApi(ENDPOINTS.indexer);
 
 // ---------- Types ----------
 export interface ExchangeRateResponse {
@@ -104,6 +106,42 @@ export interface UserWinsResponse {
 export interface PoolBalancesResponse {
     regular_pool: string;
     big_pool: string;
+}
+
+export interface OracleConfig {
+    admin: string;
+    operators: string[];
+    quicknet_pubkey: number[];
+    chain_hash: string;
+    genesis_time: number;
+    period_seconds: number;
+}
+
+export interface DistributorConfig {
+    admin: string;
+    operator: string;
+    staking_hub: string;
+    drand_oracle: string;
+    reveal_deadline_seconds: number;
+    epochs_between_regular: number;
+    epochs_between_big: number;
+}
+
+export interface StoredBeacon {
+    round: number;
+    randomness: number[];
+    signature: number[];
+    verified: boolean;
+    submitted_at: string;
+    submitted_by: string;
+}
+
+export interface SnapshotInfo {
+    epoch: number;
+    merkle_root: string;
+    total_weight: string;
+    num_holders: number;
+    submitted_at: string;
 }
 
 // ---------- Generic query helper ----------
@@ -291,6 +329,69 @@ export async function fetchStakingApr(
     } catch {
         return null;
     }
+}
+
+// ---------- Validator detail queries ----------
+export async function fetchValidatorDetails(validatorAddress: string) {
+    return stakingApi.fetchValidator(validatorAddress);
+}
+
+export async function fetchProtocolDelegation(validatorAddress: string) {
+    return stakingApi.fetchDelegation({
+        injectiveAddress: CONTRACTS.stakingHub,
+        validatorAddress,
+    });
+}
+
+export async function fetchStakingPool() {
+    return stakingApi.fetchPool();
+}
+
+export async function fetchAnnualProvisions() {
+    return mintApi.fetchAnnualProvisions();
+}
+
+// ---------- Account transaction history ----------
+export async function fetchAccountTransactions(
+    address: string,
+    limit?: number,
+) {
+    return explorerApi.fetchAccountTx({
+        address,
+        limit: limit ?? 20,
+    });
+}
+
+// ---------- drand Oracle Queries ----------
+export async function fetchOracleConfig(): Promise<OracleConfig> {
+    return queryContract<OracleConfig>(CONTRACTS.drandOracle, { config: {} });
+}
+
+export async function fetchLatestRound(): Promise<number> {
+    return queryContract<number>(CONTRACTS.drandOracle, { latest_round: {} });
+}
+
+export async function fetchBeacon(
+    round: number,
+): Promise<StoredBeacon | null> {
+    return queryContract<StoredBeacon | null>(CONTRACTS.drandOracle, {
+        beacon: { round },
+    });
+}
+
+// ---------- Reward Distributor Config ----------
+export async function fetchDistributorConfig(): Promise<DistributorConfig> {
+    return queryContract<DistributorConfig>(CONTRACTS.rewardDistributor, {
+        config: {},
+    });
+}
+
+export async function fetchSnapshot(
+    epoch: number,
+): Promise<SnapshotInfo | null> {
+    return queryContract<SnapshotInfo | null>(CONTRACTS.rewardDistributor, {
+        snapshot: { epoch },
+    });
 }
 
 // ---------- Execute message builders ----------

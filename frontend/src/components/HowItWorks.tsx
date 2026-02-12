@@ -38,7 +38,7 @@ const steps = [
 
 const distributions = [
   { label: 'Regular Draws', pct: 70, color: '#8B6FFF', gradient: 'linear-gradient(90deg, #8B6FFF, #6B4FD6)' },
-  { label: 'Big Monthly Draw', pct: 20, color: '#f472b6', gradient: 'linear-gradient(90deg, #f472b6, #ec4899)' },
+  { label: 'Big Weekly Draw', pct: 20, color: '#f472b6', gradient: 'linear-gradient(90deg, #f472b6, #ec4899)' },
   { label: 'Base Yield', pct: 5, color: '#22c55e', gradient: '#22c55e' },
   { label: 'Protocol Fee', pct: 5, color: '#f59e0b', gradient: '#f59e0b' },
 ]

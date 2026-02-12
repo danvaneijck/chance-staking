@@ -214,19 +214,38 @@ input:focus, textarea:focus {
   100% { transform: translateX(-50%); }
 }
 
+/* ═══ Mobile burger button — hidden on desktop ═══ */
+.header-burger {
+  display: none !important;
+}
+
+/* ═══ Mobile nav drawer hover states ═══ */
+.mobile-nav-drawer a:hover,
+.mobile-nav-drawer a:active {
+  background: rgba(139, 111, 255, 0.08);
+  color: #F0F0F5;
+}
+
+.mobile-nav-drawer button:hover {
+  border-color: rgba(139, 111, 255, 0.3);
+}
+
 /* ═══ Mobile Responsive ═══ */
 
 @media (max-width: 768px) {
-  /* Header */
+  /* Header — hide desktop nav + wallet, show burger */
   .header-inner {
     padding: 0 16px !important;
     height: 60px !important;
   }
-  .header-nav {
-    gap: 16px !important;
+  .header-nav-desktop {
+    display: none !important;
   }
-  .header-nav a {
-    font-size: 12px !important;
+  .header-wallet-desktop {
+    display: none !important;
+  }
+  .header-burger {
+    display: flex !important;
   }
 
   /* Hero */
@@ -238,6 +257,7 @@ input:focus, textarea:focus {
   }
   .hero-subtitle {
     font-size: 15px !important;
+    max-width: 100% !important;
   }
   .hero-stats-row {
     flex-direction: column !important;
@@ -276,6 +296,15 @@ input:focus, textarea:focus {
     grid-template-columns: 1fr !important;
   }
 
+  /* Rewards Calculator */
+  .rewards-calc-layout {
+    grid-template-columns: 1fr !important;
+  }
+  .rewards-calc-stats-row {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
   /* How it Works */
   .hiw-steps-grid {
     flex-direction: column !important;
@@ -285,7 +314,9 @@ input:focus, textarea:focus {
     display: none !important;
   }
   .hiw-step-card {
-    max-width: 320px !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    flex: 1 1 100% !important;
   }
   .hiw-title {
     font-size: 28px !important;
@@ -315,6 +346,23 @@ input:focus, textarea:focus {
     flex-direction: column !important;
     gap: 12px !important;
   }
+  .draw-detail-container {
+    padding: 0 16px !important;
+  }
+  .draw-detail-title {
+    font-size: 24px !important;
+  }
+  .draw-detail-container .verify-step-title {
+    flex-wrap: wrap !important;
+  }
+
+  /* Epoch countdown */
+  .epoch-countdown-wrapper {
+    padding: 12px 12px !important;
+  }
+  .epoch-unit-value {
+    font-size: 20px !important;
+  }
 }
 
 @media (max-width: 480px) {
@@ -327,10 +375,15 @@ input:focus, textarea:focus {
   }
   .hero-cta-row {
     flex-direction: column !important;
-    align-items: stretch !important;
+    align-items: center !important;
+  }
+  .hero-cta-row a {
+    width: 100% !important;
+    display: block !important;
   }
   .hero-cta-primary, .hero-cta-secondary {
     justify-content: center !important;
+    width: 100% !important;
   }
   .footer-links-grid {
     flex-direction: column !important;
@@ -339,5 +392,97 @@ input:focus, textarea:focus {
   .footer-bottom {
     flex-direction: column !important;
     text-align: center !important;
+  }
+}
+
+/* ── New pages responsive ── */
+@media (max-width: 768px) {
+  /* Validators */
+  .validators-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .validators-page-stats {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  /* How It Works page */
+  .hiw-page-math-steps {
+    grid-template-columns: 1fr !important;
+  }
+  .hiw-page-security-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .hiw-page-timing-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .hiw-page-steps {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  .hiw-page-step-arrow {
+    transform: rotate(90deg);
+    padding-top: 0 !important;
+    padding: 4px 0 !important;
+  }
+  .hiw-page-timeline {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+  .hiw-page-split-legend {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  /* Staking page */
+  .staking-page-stats {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  /* Draws page */
+  .draws-page-stats {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  /* Docs page */
+  .docs-layout {
+    flex-direction: column !important;
+  }
+  .docs-sidebar {
+    position: static !important;
+    width: 100% !important;
+    max-height: none !important;
+    border-right: none !important;
+    border-bottom: 1px solid #2A2A38 !important;
+    padding-right: 0 !important;
+    padding-bottom: 16px !important;
+    margin-bottom: 24px !important;
+    display: none !important;
+  }
+  .docs-sidebar.open {
+    display: flex !important;
+  }
+  .docs-sidebar-toggle {
+    display: flex !important;
+  }
+  /* Contracts page */
+  .contracts-stats {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  .contracts-query-buttons {
+    flex-wrap: wrap !important;
+  }
+  /* Audit page */
+  .audit-stats {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  .audit-finding-header {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 8px !important;
+  }
+  .audit-finding-right {
+    flex-wrap: wrap !important;
   }
 }

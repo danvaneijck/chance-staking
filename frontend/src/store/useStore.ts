@@ -47,6 +47,7 @@ interface ContractState {
     bigPoolBps: number;
     protocolFeeBps: number;
     stakingApr: number | null;
+    validators: string[];
 }
 
 interface ConfettiState {
@@ -173,6 +174,7 @@ export const useStore = create<AppState>()(
             bigPoolBps: 2000,
             protocolFeeBps: 500,
             stakingApr: null,
+            validators: [],
 
             // Confetti state
             showConfetti: false,
@@ -218,9 +220,9 @@ export const useStore = create<AppState>()(
             selectDraw: (drawId) => {
                 set({ selectedDrawId: drawId });
                 if (drawId !== null) {
-                    window.location.hash = `draw/${drawId}`;
+                    window.location.hash = `#/draws/${drawId}`;
                 } else {
-                    history.replaceState(null, "", window.location.pathname);
+                    window.location.hash = '#/draws';
                 }
             },
 
@@ -311,6 +313,7 @@ export const useStore = create<AppState>()(
                             epochState.snapshot_total_weight || "0",
                         snapshotNumHolders:
                             epochState.snapshot_num_holders || 0,
+                        validators: hubConfig.validators || [],
                     });
 
                     // Fetch on-chain staking APR in background (non-blocking)
