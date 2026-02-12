@@ -1,7 +1,7 @@
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::Uint128;
 
-/// The type of draw: regular (weighted by csINJ balance) or big (equal weight monthly).
+/// The type of draw: regular or big. Both are weighted by csINJ balance.
 #[cw_serde]
 pub enum DrawType {
     Regular,

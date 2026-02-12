@@ -56,6 +56,8 @@ pub fn instantiate(
         base_yield_bps: msg.base_yield_bps,
         regular_pool_bps: msg.regular_pool_bps,
         big_pool_bps: msg.big_pool_bps,
+        min_epochs_regular: msg.min_epochs_regular,
+        min_epochs_big: msg.min_epochs_big,
     };
 
     CONFIG.save(deps.storage, &config)?;
@@ -120,7 +122,18 @@ pub fn execute(
             admin,
             operator,
             protocol_fee_bps,
-        } => execute::update_config(deps, env, info, admin, operator, protocol_fee_bps),
+            min_epochs_regular,
+            min_epochs_big,
+        } => execute::update_config(
+            deps,
+            env,
+            info,
+            admin,
+            operator,
+            protocol_fee_bps,
+            min_epochs_regular,
+            min_epochs_big,
+        ),
         ExecuteMsg::UpdateValidators { add, remove } => {
             execute::update_validators(deps, env, info, add, remove)
         }
@@ -138,6 +151,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
             start_after,
             limit,
         } => query::query_unstake_requests(deps, address, start_after, limit),
+        QueryMsg::StakerInfo { address } => query::query_staker_info(deps, address),
     }
 }
 
@@ -163,6 +177,8 @@ mod tests {
             regular_pool_bps: 7000,
             big_pool_bps: 2000,
             csinj_subdenom: "csINJ".to_string(),
+            min_epochs_regular: 0,
+            min_epochs_big: 0,
         }
     }
 
@@ -650,5 +666,85 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, ContractError::NoValidators));
+    }
+
+    #[test]
+    fn test_stake_records_epoch() {
+        use crate::state::USER_STAKE_EPOCH;
+
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(100_000_000, "inj"));
+        execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
+
+        // Verify stake epoch recorded
+        let addr = deps.api.addr_make("user1");
+        let stake_epoch = USER_STAKE_EPOCH.load(deps.as_ref().storage, &addr).unwrap();
+        assert_eq!(stake_epoch, 1); // epoch starts at 1
+
+        // Second stake should not overwrite
+        let user1 = deps.api.addr_make("user1");
+        let info = message_info(&user1, &coins(50_000_000, "inj"));
+        execute(deps.as_mut(), mock_env(), info, ExecuteMsg::Stake {}).unwrap();
+
+        let addr = deps.api.addr_make("user1");
+        let stake_epoch = USER_STAKE_EPOCH.load(deps.as_ref().storage, &addr).unwrap();
+        assert_eq!(stake_epoch, 1); // still epoch 1
+    }
+
+    #[test]
+    fn test_staker_info_query() {
+        use crate::msg::StakerInfoResponse;
+        use cosmwasm_std::from_json;
+
+        let mut deps = mock_dependencies();
+        setup_contract(deps.as_mut());
+
+        // Query before staking — should return None
+        let user1 = deps.api.addr_make("user1");
+        let res = query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::StakerInfo {
+                address: user1.to_string(),
+            },
+        )
+        .unwrap();
+        let info: StakerInfoResponse = from_json(res).unwrap();
+        assert_eq!(info.stake_epoch, None);
+
+        // Stake
+        let user1 = deps.api.addr_make("user1");
+        let msg_info = message_info(&user1, &coins(100_000_000, "inj"));
+        execute(deps.as_mut(), mock_env(), msg_info, ExecuteMsg::Stake {}).unwrap();
+
+        // Query after staking — should return epoch 1
+        let res = query(
+            deps.as_ref(),
+            mock_env(),
+            QueryMsg::StakerInfo {
+                address: user1.to_string(),
+            },
+        )
+        .unwrap();
+        let info: StakerInfoResponse = from_json(res).unwrap();
+        assert_eq!(info.stake_epoch, Some(1));
+    }
+
+    #[test]
+    fn test_min_epochs_in_config() {
+        let mut deps = mock_dependencies();
+        let mut msg = default_instantiate_msg();
+        msg.min_epochs_regular = 3;
+        msg.min_epochs_big = 7;
+        let admin = deps.api.addr_make("admin");
+        let info = message_info(&admin, &[]);
+        instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let config = CONFIG.load(deps.as_ref().storage).unwrap();
+        assert_eq!(config.min_epochs_regular, 3);
+        assert_eq!(config.min_epochs_big, 7);
     }
 }

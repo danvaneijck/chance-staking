@@ -1,9 +1,10 @@
 use cosmwasm_std::{to_json_binary, Binary, Deps, Order, StdResult};
 use cw_storage_plus::Bound;
 
-use crate::msg::{ExchangeRateResponse, UnstakeRequestEntry};
+use crate::msg::{ExchangeRateResponse, StakerInfoResponse, UnstakeRequestEntry};
 use crate::state::{
     CONFIG, EPOCH_STATE, EXCHANGE_RATE, TOTAL_CSINJ_SUPPLY, TOTAL_INJ_BACKING, UNSTAKE_REQUESTS,
+    USER_STAKE_EPOCH,
 };
 
 pub fn query_config(deps: Deps) -> StdResult<Binary> {
@@ -47,4 +48,13 @@ pub fn query_unstake_requests(
         .collect();
 
     to_json_binary(&entries)
+}
+
+pub fn query_staker_info(deps: Deps, address: String) -> StdResult<Binary> {
+    let addr = deps.api.addr_validate(&address)?;
+    let stake_epoch = USER_STAKE_EPOCH.may_load(deps.storage, &addr)?;
+    to_json_binary(&StakerInfoResponse {
+        address,
+        stake_epoch,
+    })
 }

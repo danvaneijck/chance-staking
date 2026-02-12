@@ -13,6 +13,9 @@ pub const NEXT_UNSTAKE_ID: Map<&Addr, u64> = Map::new("next_unstake_id");
 /// Updated on unstake (increment) and claim_unstaked (decrement) to avoid
 /// iterating all requests on every distribute_rewards() call.
 pub const PENDING_UNSTAKE_TOTAL: Item<Uint128> = Item::new("pending_unstake");
+/// Tracks the epoch when each user first staked. Set once on first stake,
+/// used by the off-chain snapshot builder to enforce min_epochs eligibility.
+pub const USER_STAKE_EPOCH: Map<&Addr, u64> = Map::new("user_stake_epoch");
 
 #[cw_serde]
 pub struct Config {
@@ -33,6 +36,10 @@ pub struct Config {
     pub regular_pool_bps: u16,
     /// Big draw pool in basis points (2000 = 20%)
     pub big_pool_bps: u16,
+    /// Minimum epochs a user must have been staking to be eligible for regular draws
+    pub min_epochs_regular: u64,
+    /// Minimum epochs a user must have been staking to be eligible for big draws
+    pub min_epochs_big: u64,
 }
 
 #[cw_serde]

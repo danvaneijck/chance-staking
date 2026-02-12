@@ -17,6 +17,10 @@ pub struct InstantiateMsg {
     pub big_pool_bps: u16,
     /// Subdenom for Token Factory, e.g. "csINJ"
     pub csinj_subdenom: String,
+    /// Minimum epochs staked to be eligible for regular draws
+    pub min_epochs_regular: u64,
+    /// Minimum epochs staked to be eligible for big draws
+    pub min_epochs_big: u64,
 }
 
 #[cw_serde]
@@ -45,6 +49,8 @@ pub enum ExecuteMsg {
         admin: Option<String>,
         operator: Option<String>,
         protocol_fee_bps: Option<u16>,
+        min_epochs_regular: Option<u64>,
+        min_epochs_big: Option<u64>,
     },
     /// Update validator set. Admin only.
     UpdateValidators {
@@ -81,6 +87,8 @@ pub enum QueryMsg {
         start_after: Option<u64>,
         limit: Option<u32>,
     },
+    #[returns(StakerInfoResponse)]
+    StakerInfo { address: String },
 }
 
 #[cw_serde]
@@ -94,4 +102,11 @@ pub struct ExchangeRateResponse {
 pub struct UnstakeRequestEntry {
     pub id: u64,
     pub request: UnstakeRequest,
+}
+
+#[cw_serde]
+pub struct StakerInfoResponse {
+    pub address: String,
+    /// The epoch when this user first staked, or None if they have never staked.
+    pub stake_epoch: Option<u64>,
 }
