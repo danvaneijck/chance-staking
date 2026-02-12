@@ -503,6 +503,7 @@ pub fn take_snapshot(
 }
 
 /// Update contract configuration. Admin only.
+#[allow(clippy::too_many_arguments)]
 pub fn update_config(
     deps: DepsMut,
     _env: Env,

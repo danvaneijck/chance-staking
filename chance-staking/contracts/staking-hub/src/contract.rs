@@ -687,7 +687,9 @@ mod tests {
         // Simulate epoch advancing to 5
         let mut epoch_state = EPOCH_STATE.load(deps.as_ref().storage).unwrap();
         epoch_state.current_epoch = 5;
-        EPOCH_STATE.save(deps.as_mut().storage, &epoch_state).unwrap();
+        EPOCH_STATE
+            .save(deps.as_mut().storage, &epoch_state)
+            .unwrap();
 
         // Second stake should reset epoch to 5
         let user1 = deps.api.addr_make("user1");
