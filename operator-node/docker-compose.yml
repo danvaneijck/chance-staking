@@ -11,9 +11,9 @@ services:
       NETWORK: "testnet"
 
       # Contract addresses (required - from deploy_testnet.sh output)
-      DRAND_ORACLE_ADDRESS: "inj1..."
-      STAKING_HUB_ADDRESS: "inj1..."
-      REWARD_DISTRIBUTOR_ADDRESS: "inj1..."
+      DRAND_ORACLE_ADDRESS: "inj1uc0luks5djcwnytasp85v497pyg4k4sae347yp"
+      REWARD_DISTRIBUTOR_ADDRESS: "inj1l0u7s0qnltlp4h5d527l8kt8rzku5pgwfcy87u"
+      STAKING_HUB_ADDRESS: "inj137a49kunvxv8q55c4mlprj2cj4qavu3r2mjlfq"
 
       # Operator loop intervals in seconds (optional)
       DRAND_POLL_INTERVAL: "10"

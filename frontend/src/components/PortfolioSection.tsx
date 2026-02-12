@@ -68,8 +68,8 @@ export default function PortfolioSection() {
               {t === 'overview'
                 ? 'Overview'
                 : t === 'unstaking'
-                ? `Unstaking (${pendingRequests.length})`
-                : `Wins (${userWins?.total_wins ?? 0})`}
+                  ? `Unstaking (${pendingRequests.length})`
+                  : `Wins (${userWins?.total_wins ?? 0})`}
             </button>
           ))}
         </div>
@@ -199,13 +199,13 @@ export default function PortfolioSection() {
                   <div style={styles.oddsDivider} />
                   <div style={styles.oddsMain}>
                     <div style={styles.oddsPercent}>
-                      {snapshotNumHolders > 0
-                        ? formatNumber(100 / snapshotNumHolders, 4)
+                      {parseFloat(snapshotTotalWeight) > 0
+                        ? formatNumber((parseFloat(csinjBalance) / parseFloat(snapshotTotalWeight)) * 100, 4)
                         : '0'}%
                     </div>
                     <div style={styles.oddsLabel}>Big Jackpot</div>
                     <div style={styles.oddsDetail}>
-                      Equal odds per holder
+                      Weighted by csINJ balance
                     </div>
                   </div>
                 </div>

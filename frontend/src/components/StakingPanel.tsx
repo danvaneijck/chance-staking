@@ -211,8 +211,8 @@ export default function StakingPanel() {
               <h3 style={styles.infoTitle}>Prize Draws</h3>
               <div style={styles.infoValue}>70% Regular + 20% Big</div>
               <p style={styles.infoDesc}>
-                95% of staking rewards fund prize pools. Daily draws weighted by balance,
-                monthly jackpots with equal odds.
+                90% of staking rewards fund prize pools. Daily draws weighted by balance,
+                weekly jackpots also weighted by balance.
               </p>
             </div>
 

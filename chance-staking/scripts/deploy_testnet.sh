@@ -54,8 +54,8 @@ BASE_YIELD_BPS=500
 REGULAR_POOL_BPS=7000
 BIG_POOL_BPS=2000
 CSINJ_SUBDENOM="csINJ"
-MIN_EPOCHS_REGULAR=1
-MIN_EPOCHS_BIG=1
+MIN_EPOCHS_REGULAR=2
+MIN_EPOCHS_BIG=6
 
 # -- Wasm artifacts --
 DRAND_ORACLE_WASM="./artifacts/chance_drand_oracle.wasm"
@@ -65,9 +65,9 @@ STAKING_HUB_WASM="./artifacts/chance_staking_hub.wasm"
 # -- Optional: reuse existing code IDs (set to skip uploading) --
 # If set, the script will skip storing that contract's wasm and use the given ID.
 # Leave empty to upload fresh.
-EXISTING_DRAND_CODE_ID=""
-EXISTING_DISTRIBUTOR_CODE_ID=""
-EXISTING_STAKING_HUB_CODE_ID=""
+EXISTING_DRAND_CODE_ID="39244"
+EXISTING_DISTRIBUTOR_CODE_ID="39245"
+EXISTING_STAKING_HUB_CODE_ID="39246"
 
 ################################################################################
 #                                   HELPERS                                    #

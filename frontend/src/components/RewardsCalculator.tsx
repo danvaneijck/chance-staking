@@ -52,7 +52,7 @@ export default function RewardsCalculator() {
     },
     {
       label: 'Big Jackpot Pool',
-      desc: 'Equal odds per holder',
+      desc: 'Weighted by csINJ balance',
       value: bigPool,
       bps: bigPoolBps,
       color: '#f472b6',

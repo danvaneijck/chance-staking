@@ -29,7 +29,7 @@ export default function HeroSection() {
         </h1>
 
         <p className="hero-subtitle" style={styles.subtitle}>
-          Your principal stays safe in native staking while 95% of rewards
+          Your principal stays safe in native staking while 90% of rewards
           fuel random prize draws. Every csINJ token is a lottery ticket
           that never expires.
         </p>

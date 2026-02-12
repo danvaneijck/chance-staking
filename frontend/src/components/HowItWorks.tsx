@@ -24,7 +24,7 @@ const steps = [
     bg: 'rgba(56, 189, 248, 0.1)',
     borderColor: 'rgba(56, 189, 248, 0.2)',
     title: 'Enter Prize Draws',
-    description: '95% of rewards fund prize pools. Your csINJ balance is your ticket count — more tokens, more chances.',
+    description: '90% of rewards fund prize pools. Your csINJ balance is your ticket count — more tokens, more chances.',
   },
   {
     icon: Trophy,
