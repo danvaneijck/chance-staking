@@ -1,13 +1,13 @@
 # Testnet
 
-  drand-oracle code ID:        39244
+  drand-oracle code ID:        39250
 
-  drand-oracle address:        inj12dg907vrnw3zdsh8hjvf4ywqky8gw7e3v7lwf7
+  drand-oracle address:        inj1jwztm5q5gnaq0jgt36v8wkskx6ryyul9nx4q6a
 
-  reward-distributor code ID:  39245
+  reward-distributor code ID:  39251
 
-  reward-distributor address:  inj1thz9kqf74w4a8yakpx62xmnll3nf032rnnukyy
+  reward-distributor address:  inj1pzl6p4el05lum6qd3h2e78gfsnaztll8g54fmr
 
-  staking-hub code ID:         39246
+  staking-hub code ID:         39252
   
-  staking-hub address:         inj15vq83p8l6wl7qneulzgnt66dwheh2ecpprj0kn
+  staking-hub address:         inj17l2r0vgfuv4sl6j2m47fhl8fypa6jezne5hdav

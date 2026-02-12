@@ -92,7 +92,7 @@ export default function DrawsSection() {
             </div>
             <div style={styles.poolMeta}>
               <span style={styles.poolMetaItem}>
-                <Clock size={11} /> Monthly draws
+                <Clock size={11} /> Weekly draws
               </span>
               <span style={styles.poolMetaItem}>
                 <Users size={11} /> Weighted by balance

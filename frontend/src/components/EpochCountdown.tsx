@@ -39,7 +39,7 @@ export default function EpochCountdown() {
   const isAlmostDone = progress > 90
 
   return (
-    <div style={styles.wrapper}>
+    <div className="epoch-countdown-wrapper" style={styles.wrapper}>
       <div style={styles.header}>
         <div style={styles.label}>
           <div style={{
@@ -60,22 +60,22 @@ export default function EpochCountdown() {
       <div style={styles.countdown}>
         {remaining.d > 0 && (
           <div style={styles.unit}>
-            <span style={styles.unitValue}>{remaining.d}</span>
+            <span className="epoch-unit-value" style={styles.unitValue}>{remaining.d}</span>
             <span style={styles.unitLabel}>d</span>
           </div>
         )}
         <div style={styles.unit}>
-          <span style={styles.unitValue}>{pad(remaining.h)}</span>
+          <span className="epoch-unit-value" style={styles.unitValue}>{pad(remaining.h)}</span>
           <span style={styles.unitLabel}>h</span>
         </div>
         <div style={styles.separator}>:</div>
         <div style={styles.unit}>
-          <span style={styles.unitValue}>{pad(remaining.m)}</span>
+          <span className="epoch-unit-value" style={styles.unitValue}>{pad(remaining.m)}</span>
           <span style={styles.unitLabel}>m</span>
         </div>
         <div style={styles.separator}>:</div>
         <div style={styles.unit}>
-          <span style={styles.unitValue}>{pad(remaining.s)}</span>
+          <span className="epoch-unit-value" style={styles.unitValue}>{pad(remaining.s)}</span>
           <span style={styles.unitLabel}>s</span>
         </div>
       </div>

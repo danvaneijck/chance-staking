@@ -64,7 +64,7 @@ export default function DrawDetail({ drawId }: { drawId: number }) {
 
   return (
     <section style={styles.section}>
-      <div style={styles.container}>
+      <div className="draw-detail-container section-container" style={styles.container}>
         <button
           style={styles.backButton}
           onClick={() => selectDraw(null)}
@@ -98,7 +98,7 @@ export default function DrawDetail({ drawId }: { drawId: number }) {
                 }}>
                   {draw.draw_type === 'big' ? 'Big Jackpot' : 'Regular Draw'}
                 </div>
-                <h1 style={styles.drawTitle}>Draw #{draw.id}</h1>
+                <h1 className="draw-detail-title" style={styles.drawTitle}>Draw #{draw.id}</h1>
                 <div style={styles.drawTime}>
                   {draw.revealed_at
                     ? `Revealed ${timeAgo(draw.revealed_at)} · ${formatTimestamp(draw.revealed_at)}`

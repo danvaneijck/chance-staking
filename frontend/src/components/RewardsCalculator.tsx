@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Calculator, TrendingUp, Trophy, Sparkles, Landmark, Dices, Shield, Target, Zap } from 'lucide-react'
+import { Calculator, TrendingUp, Trophy, Sparkles, Landmark, Dices, Shield, Target, Zap, CloudRain } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { formatNumber } from '../utils/formatNumber'
 
@@ -14,6 +14,9 @@ export default function RewardsCalculator() {
   const minEpochsRegular = useStore((s) => s.minEpochsRegular)
   const minEpochsBig = useStore((s) => s.minEpochsBig)
   const snapshotNumHolders = useStore((s) => s.snapshotNumHolders)
+  const csinjBalance = useStore((s) => s.csinjBalance)
+  const exchangeRate = useStore((s) => s.exchangeRate)
+  const isConnected = useStore((s) => s.isConnected)
 
   const [stakeAmount, setStakeAmount] = useState('1000')
   const [apr, setApr] = useState('15')
@@ -38,6 +41,15 @@ export default function RewardsCalculator() {
   const protocolFee = totalBps > 0 ? annualRewards * (protocolFeeBps / totalBps) : 0
   const effectiveBaseApr = stake > 0 ? (baseYield / stake) * 100 : 0
 
+  // ── Connected wallet position ──
+  const walletCsinjHuman = parseFloat(csinjBalance) / 1e18
+  const rate = parseFloat(exchangeRate) || 1
+  const walletInjValue = walletCsinjHuman * rate
+  const hasWalletPosition = isConnected && walletInjValue > 0.01
+
+  // Use wallet position when connected, otherwise fall back to calculator input
+  const oddsStake = hasWalletPosition ? walletInjValue : stake
+
   // ── Prize draw probability calculations ──
   const totalInjBackingHuman = parseFloat(totalInjBacking) / 1e18
 
@@ -46,7 +58,7 @@ export default function RewardsCalculator() {
   const bigDrawsPerYear = epochsPerYear / Math.max(minEpochsBig, 1)
 
   // Include user's hypothetical stake in the pool for realistic prize sizes
-  const poolWithUser = totalInjBackingHuman + stake
+  const poolWithUser = hasWalletPosition ? totalInjBackingHuman : totalInjBackingHuman + stake
   const totalSysRewards = poolWithUser * (aprPct / 100)
   const regPoolAnnual = totalBps > 0 ? totalSysRewards * (regularPoolBps / totalBps) : 0
   const bigPoolAnnual = totalBps > 0 ? totalSysRewards * (bigPoolBps / totalBps) : 0
@@ -54,10 +66,11 @@ export default function RewardsCalculator() {
   const bigPrizePerDraw = bigDrawsPerYear > 0 ? bigPoolAnnual / bigDrawsPerYear : 0
 
   // Win probability per draw: user's share of total pool
-  const winProbPerDraw = poolWithUser > 0 && stake > 0 ? stake / poolWithUser : 0
+  const winProbPerDraw = poolWithUser > 0 && oddsStake > 0 ? oddsStake / poolWithUser : 0
 
   // Annual prize distribution using normal approximation of binomial
   // Each draw is a Bernoulli trial: win with prob p, prize = prizePerDraw
+  const oddsBaseYield = totalBps > 0 ? oddsStake * (aprPct / 100) * (baseYieldBps / totalBps) : 0
   const expectedRegTotal = regularDrawsPerYear * winProbPerDraw * regPrizePerDraw
   const expectedBigTotal = bigDrawsPerYear * winProbPerDraw * bigPrizePerDraw
   const expectedTotalPrize = expectedRegTotal + expectedBigTotal
@@ -67,22 +80,29 @@ export default function RewardsCalculator() {
   const bigVar = bigDrawsPerYear * winProbPerDraw * (1 - winProbPerDraw) * bigPrizePerDraw ** 2
   const totalPrizeStdDev = Math.sqrt(regVar + bigVar)
 
-  // Scenario payouts (annual)
-  const expectedPayout = baseYield + expectedTotalPrize
-  const luckyPayout = baseYield + expectedTotalPrize + 1.28 * totalPrizeStdDev
-  const jackpotPayout = baseYield + expectedTotalPrize + 2.33 * totalPrizeStdDev
+  // Scenario payouts (annual) — all based on oddsStake
+  const floorPayout = oddsBaseYield
+  const expectedPayout = oddsBaseYield + expectedTotalPrize
+  const unluckyPayout = Math.max(oddsBaseYield, oddsBaseYield + expectedTotalPrize - 1.28 * totalPrizeStdDev)
+  const luckyPayout = oddsBaseYield + expectedTotalPrize + 1.28 * totalPrizeStdDev
+  const jackpotPayout = oddsBaseYield + expectedTotalPrize + 2.33 * totalPrizeStdDev
 
   // Scenario APRs
-  const expectedApr = stake > 0 ? (expectedPayout / stake) * 100 : 0
-  const luckyApr = stake > 0 ? (luckyPayout / stake) * 100 : 0
-  const jackpotApr = stake > 0 ? (jackpotPayout / stake) * 100 : 0
+  const floorApr = oddsStake > 0 ? (floorPayout / oddsStake) * 100 : 0
+  const expectedApr = oddsStake > 0 ? (expectedPayout / oddsStake) * 100 : 0
+  const unluckyApr = oddsStake > 0 ? (unluckyPayout / oddsStake) * 100 : 0
+  const luckyApr = oddsStake > 0 ? (luckyPayout / oddsStake) * 100 : 0
+  const jackpotApr = oddsStake > 0 ? (jackpotPayout / oddsStake) * 100 : 0
 
   // Show variance scenarios only when there's meaningful spread
-  const hasVariance = totalPrizeStdDev > 0.05 * Math.max(expectedTotalPrize, 0.01)
+  const hasVariance = totalPrizeStdDev > 0.0005 * Math.max(expectedTotalPrize, 0.01)
+
+  // Pool share percentage
+  const poolSharePct = poolWithUser > 0 && oddsStake > 0 ? (oddsStake / poolWithUser) * 100 : 0
 
   const formatPct = (p: number): string => {
     const pct = p * 100
-    if (pct >= 10) return `${pct.toFixed(0)}%`
+    if (pct >= 10) return `${pct.toFixed(2)}%`
     if (pct >= 1) return `${pct.toFixed(1)}%`
     if (pct >= 0.1) return `${pct.toFixed(2)}%`
     if (pct >= 0.01) return `${pct.toFixed(3)}%`
@@ -93,11 +113,21 @@ export default function RewardsCalculator() {
     {
       label: 'Guaranteed Floor',
       desc: 'Base yield only — no wins needed',
-      apr: effectiveBaseApr,
-      payout: baseYield,
+      apr: floorApr,
+      payout: floorPayout,
       color: '#22c55e',
       icon: <Shield size={14} color="#22c55e" />,
     },
+    ...(hasVariance ? [
+      {
+        label: 'Unlucky Year',
+        desc: 'Bottom 10% of outcomes',
+        apr: unluckyApr,
+        payout: unluckyPayout,
+        color: '#f87171',
+        icon: <CloudRain size={14} color="#f87171" />,
+      },
+    ] : []),
     {
       label: 'Typical Year',
       desc: 'Expected mathematical average',
@@ -176,7 +206,7 @@ export default function RewardsCalculator() {
           </div>
         </div>
 
-        <div className="calc-layout" style={styles.layout}>
+        <div className="calc-layout rewards-calc-layout" style={styles.layout}>
           {/* Inputs */}
           <div style={styles.inputCard}>
             <div style={styles.inputGroup}>
@@ -286,38 +316,111 @@ export default function RewardsCalculator() {
         </div>
 
         {/* Prize Draw Odds */}
-        {stake > 0 && (
+        {oddsStake > 0 && (
           <div style={styles.oddsCard}>
             <div style={styles.oddsHeader}>
               <div style={{ ...styles.segmentIcon, background: 'rgba(251, 191, 36, 0.1)' }}>
                 <Dices size={14} color="#fbbf24" />
               </div>
               <div>
-                <div style={styles.segmentLabel}>Prize Draw Odds</div>
+                <div style={styles.segmentLabel}>Your Prize Draw Odds</div>
                 <div style={styles.segmentDesc}>
-                  How lucky draws could boost your returns
-                  {snapshotNumHolders > 0 && ` · ${snapshotNumHolders} current stakers`}
+                  {hasWalletPosition
+                    ? `Based on your ${formatNumber(walletCsinjHuman, 2)} csINJ (${formatNumber(walletInjValue, 2)} INJ)`
+                    : `Based on ${formatNumber(stake, 0)} INJ simulated stake`}
+                  {snapshotNumHolders > 0 && ` · ${snapshotNumHolders} stakers in pool`}
                 </div>
               </div>
             </div>
 
-            <div style={styles.statsRow}>
+            {/* Pool position stats */}
+            <div className="rewards-calc-stats-row" style={styles.statsRow}>
+              <div style={styles.statBox}>
+                <div style={styles.statValue}>{formatNumber(poolSharePct, poolSharePct < 1 ? 3 : 2)}%</div>
+                <div style={styles.statLabel}>Your pool share</div>
+              </div>
               <div style={styles.statBox}>
                 <div style={styles.statValue}>{formatPct(winProbPerDraw)}</div>
                 <div style={styles.statLabel}>Win chance / draw</div>
               </div>
               <div style={styles.statBox}>
-                <div style={styles.statValue}>{formatNumber(regPoolAnnual, 1)} INJ</div>
-                <div style={styles.statLabel}>Regular prizes / yr</div>
+                <div style={styles.statValue}>~{formatNumber(regPrizePerDraw, 1)} INJ</div>
+                <div style={styles.statLabel}>Per regular prize</div>
               </div>
               <div style={styles.statBox}>
-                <div style={styles.statValue}>{formatNumber(bigPoolAnnual, 1)} INJ</div>
-                <div style={styles.statLabel}>Big prizes / yr</div>
+                <div style={styles.statValue}>~{formatNumber(bigPrizePerDraw, 1)} INJ</div>
+                <div style={styles.statLabel}>Per big prize</div>
               </div>
             </div>
 
             <div style={styles.oddsDivider} />
 
+            {/* Outcome spectrum bar */}
+            {hasVariance && (
+              <div style={styles.spectrumContainer}>
+                <div style={styles.spectrumLabel}>Annual outcome range</div>
+                <div style={styles.spectrumTrack}>
+                  {(() => {
+                    const min = floorPayout
+                    const max = jackpotPayout
+                    const range = max - min || 1
+                    const markers = [
+                      { payout: floorPayout, color: '#22c55e', label: 'Floor' },
+                      { payout: unluckyPayout, color: '#f87171', label: 'Unlucky' },
+                      { payout: expectedPayout, color: '#60a5fa', label: 'Typical' },
+                      { payout: luckyPayout, color: '#8B6FFF', label: 'Lucky' },
+                      { payout: jackpotPayout, color: '#fbbf24', label: 'Jackpot' },
+                    ]
+                    return (
+                      <>
+                        {/* Gradient bar */}
+                        <div style={{
+                          position: 'absolute',
+                          inset: 0,
+                          borderRadius: 4,
+                          background: 'linear-gradient(90deg, #22c55e 0%, #f87171 15%, #60a5fa 40%, #8B6FFF 70%, #fbbf24 100%)',
+                          opacity: 0.3,
+                        }} />
+                        {/* Filled portion up to expected */}
+                        <div style={{
+                          position: 'absolute',
+                          top: 0,
+                          bottom: 0,
+                          left: 0,
+                          width: `${((expectedPayout - min) / range) * 100}%`,
+                          borderRadius: 4,
+                          background: 'linear-gradient(90deg, #22c55e, #60a5fa)',
+                          opacity: 0.6,
+                        }} />
+                        {/* Markers */}
+                        {markers.map((m) => (
+                          <div key={m.label} style={{
+                            position: 'absolute',
+                            left: `${((m.payout - min) / range) * 100}%`,
+                            top: -2,
+                            bottom: -2,
+                            width: 3,
+                            borderRadius: 2,
+                            background: m.color,
+                            boxShadow: `0 0 6px ${m.color}80`,
+                          }} />
+                        ))}
+                      </>
+                    )
+                  })()}
+                </div>
+                <div style={styles.spectrumLabels}>
+                  <span style={{ color: '#22c55e', fontSize: 10, fontWeight: 600 }}>
+                    {formatNumber(floorPayout, 1)} INJ
+                  </span>
+                  <span style={{ color: '#fbbf24', fontSize: 10, fontWeight: 600 }}>
+                    {formatNumber(jackpotPayout, 1)} INJ
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Scenario rows */}
             <div style={styles.segmentList}>
               {oddsScenarios.map((s) => (
                 <div key={s.label} style={styles.segmentRow}>
@@ -343,11 +446,13 @@ export default function RewardsCalculator() {
             </div>
 
             <div style={styles.oddsNote}>
-              Normal staking: {formatNumber(aprPct, 1)}% APR. Your expected return
-              {' '}≈ chain APR minus the {formatNumber((protocolFeeBps / totalBps) * 100, 1)}% protocol fee.
+              {hasWalletPosition
+                ? `Your ${formatNumber(poolSharePct, poolSharePct < 1 ? 3 : 2)}% pool share gives you a ${formatPct(winProbPerDraw)} chance to win each draw.`
+                : `Normal staking: ${formatNumber(aprPct, 1)}% APR.`}
+              {' '}Guaranteed floor is base yield with zero wins.
               {hasVariance
-                ? ' Prize draws add variance — you could earn less or significantly more than normal staking.'
-                : ' As the pool grows with more stakers, individual prizes get larger and outcomes diverge — that\'s where the real excitement comes from.'}
+                ? ` In an unlucky year you\'d still beat the floor. In a lucky year, prize draws can significantly boost your returns.`
+                : ' As the pool grows with more stakers, individual prizes get larger and outcomes diverge.'}
             </div>
           </div>
         )}
@@ -563,7 +668,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   statsRow: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr',
+    gridTemplateColumns: 'repeat(4, 1fr)',
     gap: 8,
     marginBottom: 16,
   },
@@ -597,5 +702,28 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '10px 12px',
     background: '#0F0F13',
     borderRadius: 8,
+  },
+  spectrumContainer: {
+    marginBottom: 16,
+  },
+  spectrumLabel: {
+    fontSize: 10,
+    color: '#8E8EA0',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.06em',
+    fontWeight: 500,
+    marginBottom: 8,
+  },
+  spectrumTrack: {
+    position: 'relative' as const,
+    height: 8,
+    borderRadius: 4,
+    background: '#0F0F13',
+    overflow: 'visible',
+  },
+  spectrumLabels: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    marginTop: 6,
   },
 }
